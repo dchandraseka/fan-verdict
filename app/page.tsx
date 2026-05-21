@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../lib/supabase';
 import { Trophy, Lock, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function Dashboard() {
