@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { ShieldAlert, Edit3, Save, RotateCcw } from 'lucide-react';
 
 export default function AdminPortal() {
