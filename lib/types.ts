@@ -3,7 +3,6 @@ export type TournamentRole = 'owner' | 'admin' | 'participant';
 export type TournamentStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type MatchStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
 export type PollStatus = 'draft' | 'open' | 'locked' | 'settled' | 'cancelled';
-export type PollOption = 'option_a' | 'option_b';
 export type LedgerReason = 'correct_pick' | 'manual_adjustment' | 'historical_import';
 
 export type Profile = {
@@ -59,25 +58,34 @@ export type Poll = {
   tournament_id: string;
   match_id: string | null;
   question: string;
-  option_a: string;
-  option_b: string;
   opens_at: string;
   locks_at: string;
   status: PollStatus;
-  result_option: PollOption | null;
+  result_option_id: string | null;
+  points_per_correct: number;
   created_by: string | null;
   settled_by: string | null;
   settled_at: string | null;
   created_at: string;
   updated_at: string;
   matches?: Match | null;
+  poll_options?: PollOption[];
+};
+
+export type PollOption = {
+  id: string;
+  poll_id: string;
+  label: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Vote = {
   id: string;
   poll_id: string;
   user_id: string;
-  selected_option: PollOption;
+  selected_option_id: string;
   voted_at: string;
   updated_at: string;
 };

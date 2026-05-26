@@ -11,6 +11,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 drop table if exists public.audit_log cascade;
 drop table if exists public.points_ledger cascade;
 drop table if exists public.votes cascade;
+drop table if exists public.poll_options cascade;
 drop table if exists public.polls cascade;
 drop table if exists public.matches cascade;
 drop table if exists public.tournament_members cascade;
@@ -25,6 +26,7 @@ drop function if exists public.is_tournament_admin(uuid) cascade;
 drop function if exists public.is_tournament_owner(uuid) cascade;
 drop function if exists public.poll_tournament_id(uuid) cascade;
 drop function if exists public.poll_is_open(uuid) cascade;
+drop function if exists public.poll_option_belongs_to_poll(uuid, uuid) cascade;
 
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -86,13 +88,12 @@ create table public.polls (
   tournament_id uuid not null references public.tournaments(id) on delete cascade,
   match_id uuid references public.matches(id) on delete cascade,
   question text not null,
-  option_a text not null,
-  option_b text not null,
   opens_at timestamptz not null default timezone('utc', now()),
   locks_at timestamptz not null,
   status text not null default 'open'
     check (status in ('draft', 'open', 'locked', 'settled', 'cancelled')),
-  result_option text check (result_option is null or result_option in ('option_a', 'option_b')),
+  result_option_id uuid,
+  points_per_correct integer not null default 1 check (points_per_correct > 0),
   created_by uuid references public.profiles(id) on delete set null,
   settled_by uuid references public.profiles(id) on delete set null,
   settled_at timestamptz,
@@ -100,11 +101,21 @@ create table public.polls (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table public.poll_options (
+  id uuid primary key default gen_random_uuid(),
+  poll_id uuid not null references public.polls(id) on delete cascade,
+  label text not null,
+  sort_order integer not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (poll_id, sort_order)
+);
+
 create table public.votes (
   id uuid primary key default gen_random_uuid(),
   poll_id uuid not null references public.polls(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  selected_option text not null check (selected_option in ('option_a', 'option_b')),
+  selected_option_id uuid not null references public.poll_options(id) on delete restrict,
   voted_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   unique (poll_id, user_id)
@@ -155,6 +166,10 @@ for each row execute function public.set_updated_at();
 
 create trigger polls_set_updated_at
 before update on public.polls
+for each row execute function public.set_updated_at();
+
+create trigger poll_options_set_updated_at
+before update on public.poll_options
 for each row execute function public.set_updated_at();
 
 create trigger votes_set_updated_at
@@ -300,11 +315,27 @@ as $$
   );
 $$;
 
+create or replace function public.poll_option_belongs_to_poll(target_poll_id uuid, target_option_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.poll_options po
+    where po.poll_id = target_poll_id
+      and po.id = target_option_id
+  );
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.tournaments enable row level security;
 alter table public.tournament_members enable row level security;
 alter table public.matches enable row level security;
 alter table public.polls enable row level security;
+alter table public.poll_options enable row level security;
 alter table public.votes enable row level security;
 alter table public.points_ledger enable row level security;
 alter table public.audit_log enable row level security;
@@ -398,6 +429,17 @@ to authenticated
 using (public.is_tournament_admin(tournament_id))
 with check (public.is_tournament_admin(tournament_id));
 
+create policy "Members can read poll options"
+on public.poll_options for select
+to authenticated
+using (public.is_tournament_member(public.poll_tournament_id(poll_id)));
+
+create policy "Admins can manage poll options"
+on public.poll_options for all
+to authenticated
+using (public.is_tournament_admin(public.poll_tournament_id(poll_id)))
+with check (public.is_tournament_admin(public.poll_tournament_id(poll_id)));
+
 create policy "Members can read votes"
 on public.votes for select
 to authenticated
@@ -410,6 +452,7 @@ with check (
   user_id = auth.uid()
   and public.is_tournament_member(public.poll_tournament_id(poll_id))
   and public.poll_is_open(poll_id)
+  and public.poll_option_belongs_to_poll(poll_id, selected_option_id)
 );
 
 create policy "Members can change votes before lock"
@@ -419,11 +462,13 @@ using (
   user_id = auth.uid()
   and public.is_tournament_member(public.poll_tournament_id(poll_id))
   and public.poll_is_open(poll_id)
+  and public.poll_option_belongs_to_poll(poll_id, selected_option_id)
 )
 with check (
   user_id = auth.uid()
   and public.is_tournament_member(public.poll_tournament_id(poll_id))
   and public.poll_is_open(poll_id)
+  and public.poll_option_belongs_to_poll(poll_id, selected_option_id)
 );
 
 create policy "Members can read ledger"

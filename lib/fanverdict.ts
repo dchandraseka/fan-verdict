@@ -25,9 +25,13 @@ export function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-export function optionLabel(poll: Pick<Poll, 'option_a' | 'option_b'>, option: PollOption | null | undefined) {
-  if (option === 'option_a') return poll.option_a;
-  if (option === 'option_b') return poll.option_b;
+export function sortedPollOptions(poll: Pick<Poll, 'poll_options'>): PollOption[] {
+  return (poll.poll_options ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
+}
+
+export function optionLabel(poll: Pick<Poll, 'poll_options'>, optionId: string | null | undefined) {
+  const option = sortedPollOptions(poll).find((item) => item.id === optionId);
+  if (option) return option.label;
   return 'Pending';
 }
 
@@ -53,11 +57,11 @@ export function calculateStandings(
   const accuracyByUser = new Map<string, { correct: number; settled: number }>();
   for (const vote of votes) {
     const poll = pollsById.get(vote.poll_id);
-    if (!poll?.result_option || poll.status !== 'settled') continue;
+    if (!poll?.result_option_id || poll.status !== 'settled') continue;
 
     const current = accuracyByUser.get(vote.user_id) ?? { correct: 0, settled: 0 };
     current.settled += 1;
-    if (vote.selected_option === poll.result_option) current.correct += 1;
+    if (vote.selected_option_id === poll.result_option_id) current.correct += 1;
     accuracyByUser.set(vote.user_id, current);
   }
 

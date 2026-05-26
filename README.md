@@ -9,8 +9,10 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Tournament membership with participant, admin, and owner roles.
 - Match polls with team options and a lock time.
 - Manual polls inside a tournament.
+- Polls can have two or more options.
 - Vote changes until the poll lock time.
-- Admin result settlement that awards 1 point to correct votes.
+- Admin result settlement with configurable points per correct vote.
+- Admin correction of poll questions, option names, venue, and lock time before a poll locks.
 - Manual point adjustments through a ledger.
 - Vote audit log with participant, selected option, and timestamp.
 - Dashboard sharing links for browser share, WhatsApp, and email.
@@ -44,6 +46,10 @@ Install Command: npm install
 Build Command: npm run build
 Output Directory: .next
 ```
+
+If the database was created with the original two-option prototype, run
+`supabase/migrate-dynamic-poll-options.sql` in the Supabase SQL Editor before
+deploying this code.
 
 ## Local Setup
 
@@ -79,6 +85,7 @@ The core tables are:
 - `tournament_members`
 - `matches`
 - `polls`
+- `poll_options`
 - `votes`
 - `points_ledger`
 - `audit_log`

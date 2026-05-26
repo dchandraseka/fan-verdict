@@ -14,9 +14,9 @@ import {
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
-import { formatDateTime, optionLabel } from '@/lib/fanverdict';
+import { formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import type { Poll, PollOption, Profile, Tournament, TournamentMember } from '@/lib/types';
+import type { Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
 
 function defaultDateTimeLocal() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -24,6 +24,29 @@ function defaultDateTimeLocal() {
 
   const offsetMs = date.getTimezoneOffset() * 60 * 1000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  date.setSeconds(0, 0);
+
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function normalizeOptionLabels(values: string[]) {
+  const labels = values.map((value) => value.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const uniqueLabels: string[] = [];
+
+  for (const label of labels) {
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueLabels.push(label);
+  }
+
+  return uniqueLabels;
 }
 
 export default function AdminPortal() {
@@ -44,16 +67,23 @@ export default function AdminPortal() {
   const [gameNumber, setGameNumber] = useState('');
   const [teamA, setTeamA] = useState('');
   const [teamB, setTeamB] = useState('');
+  const [matchExtraOptions, setMatchExtraOptions] = useState<string[]>([]);
   const [startsAt, setStartsAt] = useState(defaultDateTimeLocal);
   const [venue, setVenue] = useState('');
 
   const [manualQuestion, setManualQuestion] = useState('');
-  const [manualOptionA, setManualOptionA] = useState('');
-  const [manualOptionB, setManualOptionB] = useState('');
+  const [manualOptions, setManualOptions] = useState(['', '']);
   const [manualLocksAt, setManualLocksAt] = useState(defaultDateTimeLocal);
 
   const [resultPollId, setResultPollId] = useState('');
-  const [resultOption, setResultOption] = useState<PollOption>('option_a');
+  const [resultOptionId, setResultOptionId] = useState('');
+  const [resultPoints, setResultPoints] = useState('1');
+
+  const [editPollId, setEditPollId] = useState('');
+  const [editQuestion, setEditQuestion] = useState('');
+  const [editVenue, setEditVenue] = useState('');
+  const [editLocksAt, setEditLocksAt] = useState(defaultDateTimeLocal);
+  const [editOptions, setEditOptions] = useState<string[]>(['', '']);
 
   const [adjustmentUserId, setAdjustmentUserId] = useState('');
   const [adjustmentDelta, setAdjustmentDelta] = useState('1');
@@ -76,6 +106,18 @@ export default function AdminPortal() {
   const selectedResultPoll = useMemo(
     () => polls.find((poll) => poll.id === resultPollId) ?? null,
     [polls, resultPollId],
+  );
+  const selectedResultOptions = useMemo(
+    () => (selectedResultPoll ? sortedPollOptions(selectedResultPoll) : []),
+    [selectedResultPoll],
+  );
+  const editablePolls = useMemo(
+    () => polls.filter((poll) => poll.status === 'open' && !isPollLocked(poll)),
+    [polls],
+  );
+  const selectedEditPoll = useMemo(
+    () => editablePolls.find((poll) => poll.id === editPollId) ?? null,
+    [editPollId, editablePolls],
   );
 
   useEffect(() => {
@@ -122,7 +164,7 @@ export default function AdminPortal() {
         supabase.from('tournament_members').select('*').eq('tournament_id', tournamentId).order('joined_at'),
         supabase
           .from('polls')
-          .select('*, matches(*)')
+          .select('*, matches(*), poll_options(*)')
           .eq('tournament_id', tournamentId)
           .order('locks_at', { ascending: false }),
       ]);
@@ -154,6 +196,29 @@ export default function AdminPortal() {
   useEffect(() => {
     if (selectedTournamentId) loadTournamentData(selectedTournamentId);
   }, [loadTournamentData, selectedTournamentId]);
+
+  useEffect(() => {
+    if (!selectedResultPoll) {
+      setResultOptionId('');
+      setResultPoints('1');
+      return;
+    }
+
+    const options = sortedPollOptions(selectedResultPoll);
+    if (!options.some((option) => option.id === resultOptionId)) {
+      setResultOptionId(options[0]?.id ?? '');
+    }
+    setResultPoints(String(selectedResultPoll.points_per_correct || 1));
+  }, [resultOptionId, selectedResultPoll]);
+
+  useEffect(() => {
+    if (!selectedEditPoll) return;
+
+    setEditQuestion(selectedEditPoll.question);
+    setEditVenue(selectedEditPoll.matches?.venue ?? '');
+    setEditLocksAt(toDateTimeLocal(selectedEditPoll.locks_at));
+    setEditOptions(sortedPollOptions(selectedEditPoll).map((option) => option.label));
+  }, [selectedEditPoll]);
 
   const runAdminAction = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -204,15 +269,18 @@ export default function AdminPortal() {
       if (!session || !currentTournament) throw new Error('Select a tournament first.');
       if (!teamA.trim() || !teamB.trim() || !startsAt) throw new Error('Teams and start time are required.');
 
+      const options = normalizeOptionLabels([teamA, teamB, ...matchExtraOptions]);
+      if (options.length < 2) throw new Error('At least two teams/options are required.');
+
       const lockTime = new Date(startsAt).toISOString();
-      const question = matchQuestion.trim() || `${teamA.trim()} vs ${teamB.trim()}: who will win?`;
+      const question = matchQuestion.trim() || `${options[0]} vs ${options[1]}: who will win?`;
       const { data: createdMatch, error: matchError } = await supabase
         .from('matches')
         .insert({
           tournament_id: currentTournament.id,
           game_number: gameNumber ? Number(gameNumber) : null,
-          team_a: teamA.trim(),
-          team_b: teamB.trim(),
+          team_a: options[0],
+          team_b: options[1],
           starts_at: lockTime,
           venue: venue.trim() || null,
           status: 'scheduled',
@@ -223,23 +291,37 @@ export default function AdminPortal() {
 
       if (matchError) throw matchError;
 
-      const { error: pollError } = await supabase.from('polls').insert({
-        tournament_id: currentTournament.id,
-        match_id: createdMatch.id,
-        question,
-        option_a: teamA.trim(),
-        option_b: teamB.trim(),
-        locks_at: lockTime,
-        status: 'open',
-        created_by: session.user.id,
-      });
+      const { data: createdPoll, error: pollError } = await supabase
+        .from('polls')
+        .insert({
+          tournament_id: currentTournament.id,
+          match_id: createdMatch.id,
+          question,
+          locks_at: lockTime,
+          status: 'open',
+          points_per_correct: 1,
+          created_by: session.user.id,
+        })
+        .select('*')
+        .single();
 
       if (pollError) throw pollError;
+
+      const { error: optionError } = await supabase.from('poll_options').insert(
+        options.map((label, index) => ({
+          poll_id: createdPoll.id,
+          label,
+          sort_order: index + 1,
+        })),
+      );
+
+      if (optionError) throw optionError;
 
       setMatchQuestion('');
       setGameNumber('');
       setTeamA('');
       setTeamB('');
+      setMatchExtraOptions([]);
       setStartsAt(defaultDateTimeLocal());
       setVenue('');
       await loadTournamentData(currentTournament.id);
@@ -249,28 +331,107 @@ export default function AdminPortal() {
   const handleCreateManualPoll = () =>
     runAdminAction(async () => {
       if (!session || !currentTournament) throw new Error('Select a tournament first.');
-      if (!manualQuestion.trim() || !manualOptionA.trim() || !manualOptionB.trim() || !manualLocksAt) {
+      const options = normalizeOptionLabels(manualOptions);
+      if (!manualQuestion.trim() || options.length < 2 || !manualLocksAt) {
         throw new Error('Question, both options, and lock time are required.');
       }
 
-      const { error } = await supabase.from('polls').insert({
-        tournament_id: currentTournament.id,
-        question: manualQuestion.trim(),
-        option_a: manualOptionA.trim(),
-        option_b: manualOptionB.trim(),
-        locks_at: new Date(manualLocksAt).toISOString(),
-        status: 'open',
-        created_by: session.user.id,
-      });
+      const { data: createdPoll, error } = await supabase
+        .from('polls')
+        .insert({
+          tournament_id: currentTournament.id,
+          question: manualQuestion.trim(),
+          locks_at: new Date(manualLocksAt).toISOString(),
+          status: 'open',
+          points_per_correct: 1,
+          created_by: session.user.id,
+        })
+        .select('*')
+        .single();
 
       if (error) throw error;
 
+      const { error: optionError } = await supabase.from('poll_options').insert(
+        options.map((label, index) => ({
+          poll_id: createdPoll.id,
+          label,
+          sort_order: index + 1,
+        })),
+      );
+
+      if (optionError) throw optionError;
+
       setManualQuestion('');
-      setManualOptionA('');
-      setManualOptionB('');
+      setManualOptions(['', '']);
       setManualLocksAt(defaultDateTimeLocal());
       await loadTournamentData(currentTournament.id);
       setMessage('Manual poll created.');
+    });
+
+  const handleSavePollEdits = () =>
+    runAdminAction(async () => {
+      if (!session || !currentTournament) throw new Error('Select a tournament first.');
+      if (!selectedEditPoll) throw new Error('Select an unlocked poll to edit.');
+      if (isPollLocked(selectedEditPoll)) throw new Error('This poll is already locked and cannot be edited.');
+
+      const options = normalizeOptionLabels(editOptions);
+      if (!editQuestion.trim() || options.length < 2 || !editLocksAt) {
+        throw new Error('Poll question, at least two options, and lock time are required.');
+      }
+
+      const lockTime = new Date(editLocksAt).toISOString();
+      const { error: pollError } = await supabase
+        .from('polls')
+        .update({
+          question: editQuestion.trim(),
+          locks_at: lockTime,
+        })
+        .eq('id', selectedEditPoll.id);
+
+      if (pollError) throw pollError;
+
+      if (selectedEditPoll.match_id) {
+        const { error: matchError } = await supabase
+          .from('matches')
+          .update({
+            team_a: options[0],
+            team_b: options[1],
+            starts_at: lockTime,
+            venue: editVenue.trim() || null,
+          })
+          .eq('id', selectedEditPoll.match_id);
+
+        if (matchError) throw matchError;
+      }
+
+      const existingOptions = sortedPollOptions(selectedEditPoll);
+      for (const [index, label] of options.entries()) {
+        const existingOption = existingOptions[index];
+        if (existingOption) {
+          const { error } = await supabase
+            .from('poll_options')
+            .update({ label, sort_order: index + 1 })
+            .eq('id', existingOption.id);
+
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('poll_options').insert({
+            poll_id: selectedEditPoll.id,
+            label,
+            sort_order: index + 1,
+          });
+
+          if (error) throw error;
+        }
+      }
+
+      for (const extraOption of existingOptions.slice(options.length)) {
+        const { error } = await supabase.from('poll_options').delete().eq('id', extraOption.id);
+        if (error) throw error;
+      }
+
+      await loadTournamentData(currentTournament.id);
+      setMessage('Poll details updated.');
     });
 
   const handleSettlePoll = () =>
@@ -279,13 +440,20 @@ export default function AdminPortal() {
 
       const poll = polls.find((item) => item.id === resultPollId);
       if (!poll) throw new Error('Select a poll to settle.');
+      if (!resultOptionId) throw new Error('Select the winning option.');
+
+      const pointsPerCorrect = Number(resultPoints);
+      if (!Number.isInteger(pointsPerCorrect) || pointsPerCorrect < 1) {
+        throw new Error('Points must be a whole number greater than zero.');
+      }
 
       const now = new Date().toISOString();
       const { error: pollError } = await supabase
         .from('polls')
         .update({
           status: 'settled',
-          result_option: resultOption,
+          result_option_id: resultOptionId,
+          points_per_correct: pointsPerCorrect,
           settled_by: session.user.id,
           settled_at: now,
         })
@@ -298,7 +466,7 @@ export default function AdminPortal() {
           .from('matches')
           .update({
             status: 'completed',
-            winner_team: optionLabel(poll, resultOption),
+            winner_team: optionLabel(poll, resultOptionId),
           })
           .eq('id', poll.match_id);
 
@@ -316,16 +484,16 @@ export default function AdminPortal() {
       const { data: pollVotes, error: voteError } = await supabase.from('votes').select('*').eq('poll_id', poll.id);
       if (voteError) throw voteError;
 
-      const winningVotes = (pollVotes ?? []).filter((vote) => vote.selected_option === resultOption);
+      const winningVotes = (pollVotes ?? []).filter((vote) => vote.selected_option_id === resultOptionId);
       if (winningVotes.length > 0) {
         const { error: ledgerError } = await supabase.from('points_ledger').insert(
           winningVotes.map((vote) => ({
             tournament_id: currentTournament.id,
             poll_id: poll.id,
             user_id: vote.user_id,
-            delta: 1,
+            delta: pointsPerCorrect,
             reason: 'correct_pick',
-            note: `Correct pick: ${optionLabel(poll, resultOption)}`,
+            note: `Correct pick: ${optionLabel(poll, resultOptionId)} (${pointsPerCorrect} point${pointsPerCorrect === 1 ? '' : 's'})`,
             created_by: session.user.id,
           })),
         );
@@ -339,14 +507,19 @@ export default function AdminPortal() {
         action: 'poll_settled',
         details: {
           poll_id: poll.id,
-          result_option: resultOption,
-          winner: optionLabel(poll, resultOption),
-          points_awarded: winningVotes.length,
+          result_option_id: resultOptionId,
+          winner: optionLabel(poll, resultOptionId),
+          points_per_correct: pointsPerCorrect,
+          points_awarded: winningVotes.length * pointsPerCorrect,
         },
       });
 
       await loadTournamentData(currentTournament.id);
-      setMessage(`Poll settled. Awarded ${winningVotes.length} point${winningVotes.length === 1 ? '' : 's'}.`);
+      setMessage(
+        `Poll settled. Awarded ${winningVotes.length * pointsPerCorrect} total point${
+          winningVotes.length * pointsPerCorrect === 1 ? '' : 's'
+        }.`,
+      );
     });
 
   const handleManualAdjustment = () =>
@@ -565,6 +738,35 @@ export default function AdminPortal() {
                     />
                   </label>
                 </div>
+                {matchExtraOptions.map((option, index) => (
+                  <label className="block" key={`match-extra-${index}`}>
+                    <span className="text-sm font-semibold text-slate-700">Additional team/option {index + 1}</span>
+                    <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <input
+                        value={option}
+                        onChange={(event) =>
+                          setMatchExtraOptions((current) =>
+                            current.map((item, itemIndex) => (itemIndex === index ? event.target.value : item)),
+                          )
+                        }
+                        className="h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                        placeholder="CSK"
+                      />
+                      <button
+                        onClick={() => setMatchExtraOptions((current) => current.filter((_item, itemIndex) => itemIndex !== index))}
+                        className="h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </label>
+                ))}
+                <button
+                  onClick={() => setMatchExtraOptions((current) => [...current, ''])}
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 px-3 text-sm font-bold hover:bg-slate-50"
+                >
+                  Add another team/option
+                </button>
                 <label className="block">
                   <span className="text-sm font-semibold text-slate-700">Match start / poll lock time</span>
                   <input
@@ -609,25 +811,40 @@ export default function AdminPortal() {
                     placeholder="Who will win the toss?"
                   />
                 </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Option A</span>
-                    <input
-                      value={manualOptionA}
-                      onChange={(event) => setManualOptionA(event.target.value)}
-                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                      placeholder="Heads"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Option B</span>
-                    <input
-                      value={manualOptionB}
-                      onChange={(event) => setManualOptionB(event.target.value)}
-                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                      placeholder="Tails"
-                    />
-                  </label>
+                <div className="grid gap-3">
+                  {manualOptions.map((option, index) => (
+                    <label className="block" key={`manual-option-${index}`}>
+                      <span className="text-sm font-semibold text-slate-700">
+                        {index === 0 ? 'Option A' : index === 1 ? 'Option B' : `Additional option ${index - 1}`}
+                      </span>
+                      <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <input
+                          value={option}
+                          onChange={(event) =>
+                            setManualOptions((current) =>
+                              current.map((item, itemIndex) => (itemIndex === index ? event.target.value : item)),
+                            )
+                          }
+                          className="h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                          placeholder={index === 0 ? 'Option A' : index === 1 ? 'Option B' : 'Additional option'}
+                        />
+                        {index > 1 && (
+                          <button
+                            onClick={() => setManualOptions((current) => current.filter((_item, itemIndex) => itemIndex !== index))}
+                            className="h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                  <button
+                    onClick={() => setManualOptions((current) => [...current, ''])}
+                    className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 px-3 text-sm font-bold hover:bg-slate-50"
+                  >
+                    Add another option
+                  </button>
                 </div>
                 <label className="block">
                   <span className="text-sm font-semibold text-slate-700">Poll lock time</span>
@@ -646,6 +863,103 @@ export default function AdminPortal() {
                   <Plus size={16} />
                   Create manual poll
                 </button>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+              <h2 className="flex items-center gap-2 font-bold">
+                <Settings size={18} />
+                Edit Unlocked Poll Details
+              </h2>
+              <div className="mt-4 grid gap-3">
+                <select
+                  value={editPollId}
+                  onChange={(event) => setEditPollId(event.target.value)}
+                  className="h-11 rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-blue-500"
+                >
+                  <option value="">Select open poll</option>
+                  {editablePolls.map((poll) => (
+                    <option key={poll.id} value={poll.id}>
+                      {poll.question} - locks {formatDateTime(poll.locks_at)}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedEditPoll && (
+                  <>
+                    <label className="block">
+                      <span className="text-sm font-semibold text-slate-700">Poll question</span>
+                      <input
+                        value={editQuestion}
+                        onChange={(event) => setEditQuestion(event.target.value)}
+                        className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="block">
+                        <span className="text-sm font-semibold text-slate-700">Poll lock time</span>
+                        <input
+                          value={editLocksAt}
+                          onChange={(event) => setEditLocksAt(event.target.value)}
+                          className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                          type="datetime-local"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-semibold text-slate-700">Venue</span>
+                        <input
+                          value={editVenue}
+                          onChange={(event) => setEditVenue(event.target.value)}
+                          className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                          disabled={!selectedEditPoll.match_id}
+                          placeholder={selectedEditPoll.match_id ? 'Venue' : 'Manual polls do not have venues'}
+                        />
+                      </label>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {editOptions.map((option, index) => (
+                        <label className="block" key={`edit-option-${index}`}>
+                          <span className="text-sm font-semibold text-slate-700">Option {index + 1}</span>
+                          <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <input
+                              value={option}
+                              onChange={(event) =>
+                                setEditOptions((current) =>
+                                  current.map((item, itemIndex) => (itemIndex === index ? event.target.value : item)),
+                                )
+                              }
+                              className="h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                            />
+                            {index > 1 && (
+                              <button
+                                onClick={() => setEditOptions((current) => current.filter((_item, itemIndex) => itemIndex !== index))}
+                                className="h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        onClick={() => setEditOptions((current) => [...current, ''])}
+                        className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 px-3 text-sm font-bold hover:bg-slate-50"
+                      >
+                        Add another option
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={handleSavePollEdits}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Save size={16} />
+                        Save corrections
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
@@ -670,19 +984,27 @@ export default function AdminPortal() {
                     ))}
                 </select>
                 <select
-                  value={resultOption}
-                  onChange={(event) => setResultOption(event.target.value as PollOption)}
+                  value={resultOptionId}
+                  onChange={(event) => setResultOptionId(event.target.value)}
                   className="h-11 rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-blue-500"
                 >
-                  <option value="option_a">
-                    Option A
-                    {selectedResultPoll ? ` - ${optionLabel(selectedResultPoll, 'option_a')}` : ''}
-                  </option>
-                  <option value="option_b">
-                    Option B
-                    {selectedResultPoll ? ` - ${optionLabel(selectedResultPoll, 'option_b')}` : ''}
-                  </option>
+                  <option value="">Select winning option</option>
+                  {selectedResultOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Points per correct vote</span>
+                  <input
+                    value={resultPoints}
+                    onChange={(event) => setResultPoints(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    min={1}
+                    type="number"
+                  />
+                </label>
                 <button
                   disabled={busy}
                   onClick={handleSettlePoll}

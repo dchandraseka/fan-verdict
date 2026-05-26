@@ -6,6 +6,7 @@ declare
   owner_id uuid;
   tournament_id uuid;
   match_id uuid;
+  poll_id uuid;
 begin
   select au.id
     into owner_id
@@ -53,20 +54,24 @@ begin
     tournament_id,
     match_id,
     question,
-    option_a,
-    option_b,
     locks_at,
     status,
+    points_per_correct,
     created_by
   )
   values (
     tournament_id,
     match_id,
     'Team A vs Team B: who will win?',
-    'Team A',
-    'Team B',
     now() + interval '1 day',
     'open',
+    1,
     owner_id
-  );
+  )
+  returning id into poll_id;
+
+  insert into public.poll_options (poll_id, label, sort_order)
+  values
+    (poll_id, 'Team A', 1),
+    (poll_id, 'Team B', 2);
 end $$;

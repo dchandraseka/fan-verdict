@@ -14,9 +14,9 @@ import {
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
-import { calculateStandings, formatDateTime, isPollLocked, optionLabel } from '@/lib/fanverdict';
+import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import type { PointsLedger, Poll, PollOption, Profile, Tournament, TournamentMember, Vote } from '@/lib/types';
+import type { PointsLedger, Poll, Profile, Tournament, TournamentMember, Vote } from '@/lib/types';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -129,7 +129,7 @@ export default function Dashboard() {
         supabase.from('tournament_members').select('*').eq('tournament_id', tournamentId),
         supabase
           .from('polls')
-          .select('*, matches(*)')
+          .select('*, matches(*), poll_options(*)')
           .eq('tournament_id', tournamentId)
           .order('locks_at', { ascending: true }),
         supabase.from('points_ledger').select('*').eq('tournament_id', tournamentId),
@@ -213,7 +213,7 @@ export default function Dashboard() {
     setMessage(`Joined ${currentTournament.name}.`);
   };
 
-  const handleVote = async (poll: Poll, selectedOption: PollOption) => {
+  const handleVote = async (poll: Poll, selectedOptionId: string) => {
     if (!session) {
       setMessage('Please sign in before voting.');
       return;
@@ -229,7 +229,7 @@ export default function Dashboard() {
       {
         poll_id: poll.id,
         user_id: session.user.id,
-        selected_option: selectedOption,
+        selected_option_id: selectedOptionId,
         voted_at: now,
         updated_at: now,
       },
@@ -242,7 +242,7 @@ export default function Dashboard() {
     }
 
     await loadTournamentData(poll.tournament_id);
-    setMessage(`Vote saved for ${optionLabel(poll, selectedOption)}.`);
+    setMessage(`Vote saved for ${optionLabel(poll, selectedOptionId)}.`);
   };
 
   const handleShare = async () => {
@@ -470,6 +470,7 @@ export default function Dashboard() {
                   openPolls.map((poll) => {
                     const locked = isPollLocked(poll);
                     const currentVote = myVotes.get(poll.id);
+                    const options = sortedPollOptions(poll);
 
                     return (
                       <article key={poll.id} className="rounded-lg border border-slate-200 p-4">
@@ -480,6 +481,9 @@ export default function Dashboard() {
                             </p>
                             <h3 className="mt-1 text-lg font-bold">{poll.question}</h3>
                             <p className="mt-1 text-sm text-slate-600">Locks: {formatDateTime(poll.locks_at)}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              Worth {poll.points_per_correct || 1} point{(poll.points_per_correct || 1) === 1 ? '' : 's'}
+                            </p>
                           </div>
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${
@@ -491,24 +495,24 @@ export default function Dashboard() {
                         </div>
 
                         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                          {(['option_a', 'option_b'] as PollOption[]).map((option) => (
+                          {options.map((option) => (
                             <button
-                              key={option}
+                              key={option.id}
                               disabled={locked || !myMembership}
-                              onClick={() => handleVote(poll, option)}
+                              onClick={() => handleVote(poll, option.id)}
                               className={`min-h-12 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                                currentVote?.selected_option === option
+                                currentVote?.selected_option_id === option.id
                                   ? 'border-blue-600 bg-blue-50 text-blue-700'
                                   : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
                               } disabled:cursor-not-allowed disabled:opacity-55`}
                             >
-                              {optionLabel(poll, option)}
+                              {option.label}
                             </button>
                           ))}
                         </div>
 
                         <p className="mt-3 text-xs text-slate-500">
-                          Your vote: {currentVote ? `${optionLabel(poll, currentVote.selected_option)} at ${formatDateTime(currentVote.updated_at)}` : 'Not cast'}
+                          Your vote: {currentVote ? `${optionLabel(poll, currentVote.selected_option_id)} at ${formatDateTime(currentVote.updated_at)}` : 'Not cast'}
                         </p>
                       </article>
                     );
@@ -584,7 +588,7 @@ export default function Dashboard() {
                           <tr key={vote.id}>
                             <td className="px-5 py-3 font-semibold">{profileById.get(vote.user_id)?.display_name ?? 'Unknown player'}</td>
                             <td className="px-5 py-3">{poll?.question ?? 'Poll removed'}</td>
-                            <td className="px-5 py-3">{poll ? optionLabel(poll, vote.selected_option) : vote.selected_option}</td>
+                            <td className="px-5 py-3">{poll ? optionLabel(poll, vote.selected_option_id) : 'Unknown option'}</td>
                             <td className="px-5 py-3">{formatDateTime(vote.updated_at)}</td>
                           </tr>
                         );
