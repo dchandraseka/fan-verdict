@@ -34,7 +34,7 @@ create table public.profiles (
   email text,
   whatsapp_number text,
   notification_channel text not null default 'email'
-    check (notification_channel in ('email', 'whatsapp')),
+    check (notification_channel in ('email', 'phone', 'both', 'whatsapp')),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -201,7 +201,10 @@ begin
       'Fan'
     ),
     new.raw_user_meta_data->>'whatsapp_number',
-    coalesce(new.raw_user_meta_data->>'notification_channel', 'email')
+    case
+      when new.raw_user_meta_data->>'notification_channel' = 'whatsapp' then 'phone'
+      else coalesce(new.raw_user_meta_data->>'notification_channel', 'email')
+    end
   )
   on conflict (id) do update set
     email = excluded.email,

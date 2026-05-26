@@ -13,6 +13,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Vote changes until the poll lock time.
 - Admin result settlement with configurable points per correct vote.
 - Admin correction of poll questions, option names, venue, and lock time before a poll locks.
+- Account settings for password changes, phone number, and email/phone/both alert preference.
 - Manual point adjustments through a ledger.
 - Vote audit log with participant, selected option, and timestamp.
 - Dashboard sharing links for browser share, WhatsApp, and email.

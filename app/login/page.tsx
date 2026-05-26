@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Mail, Trophy } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
+import { validateOptionalInternationalPhone } from '@/lib/phone';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { NotificationChannel } from '@/lib/types';
 
@@ -26,6 +27,12 @@ export default function LoginPage() {
 
     try {
       if (mode === 'sign-up') {
+        const phoneValidation = validateOptionalInternationalPhone(whatsappNumber);
+        if (!phoneValidation.ok) {
+          setMessage(phoneValidation.message ?? 'Invalid phone number.');
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -33,7 +40,7 @@ export default function LoginPage() {
             emailRedirectTo: `${window.location.origin}/login`,
             data: {
               display_name: displayName.trim() || email.split('@')[0],
-              whatsapp_number: whatsappNumber.trim() || null,
+              whatsapp_number: phoneValidation.value,
               notification_channel: notificationChannel,
             },
           },
@@ -138,13 +145,16 @@ export default function LoginPage() {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">WhatsApp number</span>
+                  <span className="text-sm font-semibold text-slate-700">Phone / WhatsApp number</span>
                   <input
                     value={whatsappNumber}
                     onChange={(event) => setWhatsappNumber(event.target.value)}
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
                     placeholder="+1 555 0100"
                   />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Optional. Include country code if entered, for example +1 or +91.
+                  </span>
                 </label>
 
                 <label className="block">
@@ -154,8 +164,9 @@ export default function LoginPage() {
                     onChange={(event) => setNotificationChannel(event.target.value as NotificationChannel)}
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-blue-500"
                   >
-                    <option value="email">Email</option>
-                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">Email only</option>
+                    <option value="phone">Phone only</option>
+                    <option value="both">Email and phone</option>
                   </select>
                 </label>
               </>

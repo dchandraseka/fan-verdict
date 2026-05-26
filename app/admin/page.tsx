@@ -622,6 +622,13 @@ export default function AdminPortal() {
               <RefreshCcw size={16} />
               Refresh
             </button>
+            <a
+              href="/account"
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+            >
+              <Settings size={16} />
+              Account
+            </a>
           </div>
         </div>
       </nav>

@@ -8,6 +8,7 @@ import {
   LogOut,
   Mail,
   RefreshCcw,
+  Settings,
   Share2,
   Shield,
   Trophy,
@@ -310,6 +311,16 @@ export default function Dashboard() {
               >
                 <Shield size={16} />
                 Admin
+              </a>
+            )}
+
+            {session && (
+              <a
+                href="/account"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+              >
+                <Settings size={16} />
+                Account
               </a>
             )}
 
