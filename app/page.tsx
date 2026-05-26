@@ -296,6 +296,7 @@ export default function Dashboard() {
                 {tournaments.map((tournament) => (
                   <option key={tournament.id} value={tournament.id}>
                     {tournament.name}
+                    {tournament.season_year ? ` (${tournament.season_year})` : ''} - created {formatDateTime(tournament.created_at)}
                   </option>
                 ))}
               </select>

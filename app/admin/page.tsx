@@ -18,6 +18,14 @@ import { formatDateTime, optionLabel } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { Poll, PollOption, Profile, Tournament, TournamentMember } from '@/lib/types';
 
+function defaultDateTimeLocal() {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  date.setSeconds(0, 0);
+
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 export default function AdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -29,19 +37,20 @@ export default function AdminPortal() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const [tournamentName, setTournamentName] = useState('IPL 2026');
-  const [seasonYear, setSeasonYear] = useState('2026');
+  const [tournamentName, setTournamentName] = useState('');
+  const [seasonYear, setSeasonYear] = useState('');
 
+  const [matchQuestion, setMatchQuestion] = useState('');
   const [gameNumber, setGameNumber] = useState('');
   const [teamA, setTeamA] = useState('');
   const [teamB, setTeamB] = useState('');
-  const [startsAt, setStartsAt] = useState('');
+  const [startsAt, setStartsAt] = useState(defaultDateTimeLocal);
   const [venue, setVenue] = useState('');
 
   const [manualQuestion, setManualQuestion] = useState('');
   const [manualOptionA, setManualOptionA] = useState('');
   const [manualOptionB, setManualOptionB] = useState('');
-  const [manualLocksAt, setManualLocksAt] = useState('');
+  const [manualLocksAt, setManualLocksAt] = useState(defaultDateTimeLocal);
 
   const [resultPollId, setResultPollId] = useState('');
   const [resultOption, setResultOption] = useState<PollOption>('option_a');
@@ -152,8 +161,10 @@ export default function AdminPortal() {
 
     try {
       await action();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Admin action failed.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setBusy(false);
     }
@@ -163,6 +174,9 @@ export default function AdminPortal() {
     runAdminAction(async () => {
       if (!session) throw new Error('Sign in before creating a tournament.');
       if (!tournamentName.trim()) throw new Error('Tournament name is required.');
+      if (tournaments.some((tournament) => tournament.name.toLowerCase() === tournamentName.trim().toLowerCase())) {
+        throw new Error(`A tournament named ${tournamentName.trim()} already exists.`);
+      }
 
       const { data, error } = await supabase
         .from('tournaments')
@@ -180,6 +194,8 @@ export default function AdminPortal() {
 
       await loadTournaments(session);
       setSelectedTournamentId((data as Tournament).id);
+      setTournamentName('');
+      setSeasonYear('');
       setMessage(`${tournamentName.trim()} created. You are the tournament owner.`);
     });
 
@@ -189,6 +205,7 @@ export default function AdminPortal() {
       if (!teamA.trim() || !teamB.trim() || !startsAt) throw new Error('Teams and start time are required.');
 
       const lockTime = new Date(startsAt).toISOString();
+      const question = matchQuestion.trim() || `${teamA.trim()} vs ${teamB.trim()}: who will win?`;
       const { data: createdMatch, error: matchError } = await supabase
         .from('matches')
         .insert({
@@ -209,7 +226,7 @@ export default function AdminPortal() {
       const { error: pollError } = await supabase.from('polls').insert({
         tournament_id: currentTournament.id,
         match_id: createdMatch.id,
-        question: `${teamA.trim()} vs ${teamB.trim()}: who will win?`,
+        question,
         option_a: teamA.trim(),
         option_b: teamB.trim(),
         locks_at: lockTime,
@@ -219,10 +236,11 @@ export default function AdminPortal() {
 
       if (pollError) throw pollError;
 
+      setMatchQuestion('');
       setGameNumber('');
       setTeamA('');
       setTeamB('');
-      setStartsAt('');
+      setStartsAt(defaultDateTimeLocal());
       setVenue('');
       await loadTournamentData(currentTournament.id);
       setMessage('Match poll created.');
@@ -250,7 +268,7 @@ export default function AdminPortal() {
       setManualQuestion('');
       setManualOptionA('');
       setManualOptionB('');
-      setManualLocksAt('');
+      setManualLocksAt(defaultDateTimeLocal());
       await loadTournamentData(currentTournament.id);
       setMessage('Manual poll created.');
     });
@@ -417,6 +435,7 @@ export default function AdminPortal() {
                 {tournaments.map((tournament) => (
                   <option key={tournament.id} value={tournament.id}>
                     {tournament.name}
+                    {tournament.season_year ? ` (${tournament.season_year})` : ''} - created {formatDateTime(tournament.created_at)}
                   </option>
                 ))}
               </select>
@@ -463,19 +482,26 @@ export default function AdminPortal() {
             <Plus size={18} />
             Create Tournament
           </h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_auto]">
-            <input
-              value={tournamentName}
-              onChange={(event) => setTournamentName(event.target.value)}
-              className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-              placeholder="IPL 2026"
-            />
-            <input
-              value={seasonYear}
-              onChange={(event) => setSeasonYear(event.target.value)}
-              className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-              placeholder="2026"
-            />
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_auto] md:items-end">
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-700">Tournament name</span>
+              <input
+                value={tournamentName}
+                onChange={(event) => setTournamentName(event.target.value)}
+                className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                placeholder="IPL 2027"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-700">Season year</span>
+              <input
+                value={seasonYear}
+                onChange={(event) => setSeasonYear(event.target.value)}
+                className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                placeholder="2027"
+                type="number"
+              />
+            </label>
             <button
               disabled={busy}
               onClick={handleCreateTournament}
@@ -500,39 +526,63 @@ export default function AdminPortal() {
                 Create Match Poll
               </h2>
               <div className="mt-4 grid gap-3">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Poll question</span>
+                  <input
+                    value={matchQuestion}
+                    onChange={(event) => setMatchQuestion(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    placeholder="Who will win QF1?"
+                  />
+                </label>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <input
-                    value={gameNumber}
-                    onChange={(event) => setGameNumber(event.target.value)}
-                    className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Game number"
-                    type="number"
-                  />
-                  <input
-                    value={teamA}
-                    onChange={(event) => setTeamA(event.target.value)}
-                    className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Team A"
-                  />
-                  <input
-                    value={teamB}
-                    onChange={(event) => setTeamB(event.target.value)}
-                    className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Team B"
-                  />
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">Game number</span>
+                    <input
+                      value={gameNumber}
+                      onChange={(event) => setGameNumber(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      placeholder="1"
+                      type="number"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">Team A</span>
+                    <input
+                      value={teamA}
+                      onChange={(event) => setTeamA(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      placeholder="RCB"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">Team B</span>
+                    <input
+                      value={teamB}
+                      onChange={(event) => setTeamB(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      placeholder="GT"
+                    />
+                  </label>
                 </div>
-                <input
-                  value={startsAt}
-                  onChange={(event) => setStartsAt(event.target.value)}
-                  className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                  type="datetime-local"
-                />
-                <input
-                  value={venue}
-                  onChange={(event) => setVenue(event.target.value)}
-                  className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                  placeholder="Venue"
-                />
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Match start / poll lock time</span>
+                  <input
+                    value={startsAt}
+                    onChange={(event) => setStartsAt(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    type="datetime-local"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Venue</span>
+                  <input
+                    value={venue}
+                    onChange={(event) => setVenue(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    placeholder="Dharamsala"
+                  />
+                </label>
                 <button
                   disabled={busy}
                   onClick={handleCreateMatchPoll}
@@ -550,32 +600,44 @@ export default function AdminPortal() {
                 Create Manual Poll
               </h2>
               <div className="mt-4 grid gap-3">
-                <input
-                  value={manualQuestion}
-                  onChange={(event) => setManualQuestion(event.target.value)}
-                  className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                  placeholder="Poll question"
-                />
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Poll question</span>
+                  <input
+                    value={manualQuestion}
+                    onChange={(event) => setManualQuestion(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    placeholder="Who will win the toss?"
+                  />
+                </label>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    value={manualOptionA}
-                    onChange={(event) => setManualOptionA(event.target.value)}
-                    className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Option A"
-                  />
-                  <input
-                    value={manualOptionB}
-                    onChange={(event) => setManualOptionB(event.target.value)}
-                    className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Option B"
-                  />
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">Option A</span>
+                    <input
+                      value={manualOptionA}
+                      onChange={(event) => setManualOptionA(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      placeholder="Heads"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">Option B</span>
+                    <input
+                      value={manualOptionB}
+                      onChange={(event) => setManualOptionB(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                      placeholder="Tails"
+                    />
+                  </label>
                 </div>
-                <input
-                  value={manualLocksAt}
-                  onChange={(event) => setManualLocksAt(event.target.value)}
-                  className="h-11 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                  type="datetime-local"
-                />
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Poll lock time</span>
+                  <input
+                    value={manualLocksAt}
+                    onChange={(event) => setManualLocksAt(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                    type="datetime-local"
+                  />
+                </label>
                 <button
                   disabled={busy}
                   onClick={handleCreateManualPoll}
