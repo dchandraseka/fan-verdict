@@ -30,6 +30,7 @@ export default function LoginPage() {
           email: email.trim(),
           password,
           options: {
+            emailRedirectTo: `${window.location.origin}/login`,
             data: {
               display_name: displayName.trim() || email.split('@')[0],
               whatsapp_number: whatsappNumber.trim() || null,

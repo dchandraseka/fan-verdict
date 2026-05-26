@@ -37,6 +37,10 @@ https://your-vercel-app.vercel.app
 https://your-vercel-app.vercel.app/**
 ```
 
+Set the Supabase Auth Site URL to the production Vercel URL as well. If it is
+left as `http://localhost:3000`, email confirmation and password reset links can
+send users to localhost.
+
 4. If you use Google or Facebook sign-in, configure those providers in Supabase Auth and their provider dashboards.
 
 5. Build settings in Vercel can stay at the defaults for Next.js:
