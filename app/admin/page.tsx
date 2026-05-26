@@ -405,7 +405,8 @@ export default function AdminPortal() {
       }
 
       const existingOptions = sortedPollOptions(selectedEditPoll);
-      for (const [index, label] of options.entries()) {
+      for (let index = 0; index < options.length; index += 1) {
+        const label = options[index];
         const existingOption = existingOptions[index];
         if (existingOption) {
           const { error } = await supabase
