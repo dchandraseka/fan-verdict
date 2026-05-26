@@ -4,7 +4,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 
 ## Current Features
 
-- Supabase Auth sign-up/sign-in with email/password plus Google and Facebook OAuth hooks.
+- Supabase Auth sign-up/sign-in with email/password.
 - Tournament creation; the creator is automatically added as owner.
 - Tournament membership with participant, admin, and owner roles.
 - Match polls with team options and a lock time.
@@ -42,9 +42,7 @@ Set the Supabase Auth Site URL to the production Vercel URL as well. If it is
 left as `http://localhost:3000`, email confirmation and password reset links can
 send users to localhost.
 
-4. If you use Google or Facebook sign-in, configure those providers in Supabase Auth and their provider dashboards.
-
-5. Build settings in Vercel can stay at the defaults for Next.js:
+4. Build settings in Vercel can stay at the defaults for Next.js:
 
 ```text
 Install Command: npm install

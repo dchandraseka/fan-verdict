@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Mail, Trophy } from 'lucide-react';
+import { ArrowRight, Trophy } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
 import { validateOptionalInternationalPhone } from '@/lib/phone';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -21,13 +21,27 @@ export default function LoginPage() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const phoneValidation = validateOptionalInternationalPhone(whatsappNumber);
+  const emailValue = email.trim();
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+  const canSubmit = !busy && emailLooksValid && password.length >= 6 && (mode === 'sign-in' || phoneValidation.ok);
+
   const handleEmailAuth = async () => {
+    if (!emailLooksValid) {
+      setMessage('Enter a valid email address.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage('Password must be at least 6 characters.');
+      return;
+    }
+
     setBusy(true);
     setMessage('');
 
     try {
       if (mode === 'sign-up') {
-        const phoneValidation = validateOptionalInternationalPhone(whatsappNumber);
         if (!phoneValidation.ok) {
           setMessage(phoneValidation.message ?? 'Invalid phone number.');
           return;
@@ -71,23 +85,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleOAuth = async (provider: 'google' | 'facebook') => {
-    setBusy(true);
-    setMessage('');
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (error) {
-      setMessage(error.message);
-      setBusy(false);
-    }
-  };
-
   if (!isSupabaseConfigured) {
     return (
       <main className="min-h-screen bg-slate-50 p-6">
@@ -118,13 +115,19 @@ export default function LoginPage() {
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="grid grid-cols-2 rounded-md bg-slate-100 p-1">
             <button
-              onClick={() => setMode('sign-in')}
+              onClick={() => {
+                setMode('sign-in');
+                setMessage('');
+              }}
               className={`h-10 rounded px-3 text-sm font-bold ${mode === 'sign-in' ? 'bg-white shadow-sm' : 'text-slate-600'}`}
             >
               Sign in
             </button>
             <button
-              onClick={() => setMode('sign-up')}
+              onClick={() => {
+                setMode('sign-up');
+                setMessage('');
+              }}
               className={`h-10 rounded px-3 text-sm font-bold ${mode === 'sign-up' ? 'bg-white shadow-sm' : 'text-slate-600'}`}
             >
               Create account
@@ -155,6 +158,11 @@ export default function LoginPage() {
                   <span className="mt-1 block text-xs text-slate-500">
                     Optional. Include country code if entered, for example +1 or +91.
                   </span>
+                  {whatsappNumber.trim() && !phoneValidation.ok && (
+                    <span className="mt-1 block text-xs font-semibold text-red-600">
+                      {phoneValidation.message}
+                    </span>
+                  )}
                 </label>
 
                 <label className="block">
@@ -181,6 +189,9 @@ export default function LoginPage() {
                 className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
                 placeholder="you@example.com"
               />
+              {emailValue && !emailLooksValid && (
+                <span className="mt-1 block text-xs font-semibold text-red-600">Enter a valid email address.</span>
+              )}
             </label>
 
             <label className="block">
@@ -192,12 +203,15 @@ export default function LoginPage() {
                 className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
                 placeholder="At least 6 characters"
               />
+              {password && password.length < 6 && (
+                <span className="mt-1 block text-xs font-semibold text-red-600">Password must be at least 6 characters.</span>
+              )}
             </label>
 
             {message && <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-950">{message}</p>}
 
             <button
-              disabled={busy}
+              disabled={!canSubmit}
               onClick={handleEmailAuth}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -206,29 +220,9 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="my-5 flex items-center gap-3 text-xs uppercase text-slate-400">
-            <div className="h-px flex-1 bg-slate-200" />
-            or
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          <div className="grid gap-2">
-            <button
-              disabled={busy}
-              onClick={() => handleOAuth('google')}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Mail size={18} />
-              Continue with Google
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => handleOAuth('facebook')}
-              className="inline-flex h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Continue with Facebook
-            </button>
-          </div>
+          <p className="mt-5 text-center text-xs text-slate-500">
+            Sign up uses email and password. Phone is optional and used only for future alerts.
+          </p>
         </section>
       </div>
     </main>

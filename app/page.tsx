@@ -367,7 +367,7 @@ export default function Dashboard() {
               >
                 Create account or sign in
               </a>
-              <span className="text-xs text-slate-500">Email/password, Google, and Facebook are supported by Supabase Auth.</span>
+              <span className="text-xs text-slate-500">Sign up with email and password. Phone is optional for alerts.</span>
             </div>
           </section>
         ) : tournaments.length === 0 && loadState !== 'loading' ? (
