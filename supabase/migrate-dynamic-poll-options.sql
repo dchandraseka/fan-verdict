@@ -22,6 +22,12 @@ add column if not exists points_per_correct integer not null default 1;
 alter table public.votes
 add column if not exists selected_option_id uuid;
 
+alter table public.polls
+alter column option_a drop not null;
+
+alter table public.polls
+alter column option_b drop not null;
+
 insert into public.poll_options (poll_id, label, sort_order)
 select p.id, p.option_a, 1
 from public.polls p
