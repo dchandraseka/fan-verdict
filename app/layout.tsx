@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FanVerdict IPL 2026",
-  description: "IPL Prediction Game",
+  title: "FanVerdict",
+  description: "Tournament prediction polls and leaderboards",
 };
 
 export default function RootLayout({
