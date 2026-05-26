@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Mail, Trophy } from 'lucide-react';
+import { getErrorMessage } from '@/lib/errors';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { NotificationChannel } from '@/lib/types';
 
@@ -56,7 +57,7 @@ export default function LoginPage() {
       if (error) throw error;
       router.push('/');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Authentication failed.');
+      setMessage(getErrorMessage(error, 'Authentication failed.'));
     } finally {
       setBusy(false);
     }

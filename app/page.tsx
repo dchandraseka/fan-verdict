@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
+import { getErrorMessage } from '@/lib/errors';
 import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { PointsLedger, Poll, Profile, Tournament, TournamentMember, Vote } from '@/lib/types';
@@ -112,7 +113,7 @@ export default function Dashboard() {
         setLoadState('ready');
       } catch (error) {
         setLoadState('error');
-        setMessage(error instanceof Error ? error.message : 'Unable to load tournaments.');
+        setMessage(getErrorMessage(error, 'Unable to load tournaments.'));
       }
     },
     [selectedTournamentId],
@@ -168,7 +169,7 @@ export default function Dashboard() {
       setLoadState('ready');
     } catch (error) {
       setLoadState('error');
-      setMessage(error instanceof Error ? error.message : 'Unable to load tournament data.');
+      setMessage(getErrorMessage(error, 'Unable to load tournament data.'));
     }
   }, []);
 

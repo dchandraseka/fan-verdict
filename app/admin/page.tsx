@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
+import { getErrorMessage } from '@/lib/errors';
 import { formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
@@ -150,7 +151,7 @@ export default function AdminPortal() {
           setSelectedTournamentId(loadedTournaments[0].id);
         }
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Unable to load admin data.');
+        setMessage(getErrorMessage(error, 'Unable to load admin data.'));
       }
     },
     [selectedTournamentId],
@@ -184,7 +185,7 @@ export default function AdminPortal() {
       setProfiles((profilesResult.data ?? []) as Profile[]);
       setPolls((pollsResult.data ?? []) as Poll[]);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to load tournament details.');
+      setMessage(getErrorMessage(error, 'Unable to load tournament details.'));
     }
   }, []);
 
@@ -228,7 +229,7 @@ export default function AdminPortal() {
       await action();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Admin action failed.');
+      setMessage(getErrorMessage(error, 'Admin action failed.'));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setBusy(false);
