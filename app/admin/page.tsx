@@ -11,13 +11,15 @@ import {
   Settings,
   ShieldAlert,
   Trophy,
+  UserCheck,
+  XCircle,
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import type { Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
+import type { HistoricalClaimRequest, HistoricalParticipant, Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
 
 function defaultDateTimeLocal() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -58,6 +60,10 @@ export default function AdminPortal() {
   const [members, setMembers] = useState<TournamentMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+  const [isAppAdmin, setIsAppAdmin] = useState(false);
+  const [claimRequests, setClaimRequests] = useState<HistoricalClaimRequest[]>([]);
+  const [claimParticipants, setClaimParticipants] = useState<HistoricalParticipant[]>([]);
+  const [claimRequesterProfiles, setClaimRequesterProfiles] = useState<Profile[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -104,6 +110,18 @@ export default function AdminPortal() {
 
   const canAdmin = myMembership?.role === 'owner' || myMembership?.role === 'admin';
   const profileById = useMemo(() => new Map(profiles.map((item) => [item.id, item])), [profiles]);
+  const claimParticipantById = useMemo(
+    () => new Map(claimParticipants.map((participant) => [participant.id, participant])),
+    [claimParticipants],
+  );
+  const claimRequesterProfileById = useMemo(
+    () => new Map(claimRequesterProfiles.map((item) => [item.id, item])),
+    [claimRequesterProfiles],
+  );
+  const pendingClaimRequests = useMemo(
+    () => claimRequests.filter((request) => request.status === 'pending'),
+    [claimRequests],
+  );
   const selectedResultPoll = useMemo(
     () => polls.find((poll) => poll.id === resultPollId) ?? null,
     [polls, resultPollId],
@@ -136,16 +154,19 @@ export default function AdminPortal() {
       setMessage('');
 
       try {
-        const [loadedProfile, tournamentResult] = await Promise.all([
+        const [loadedProfile, tournamentResult, appAdminResult] = await Promise.all([
           ensureProfile(activeSession),
           supabase.from('tournaments').select('*').order('created_at', { ascending: false }),
+          supabase.from('app_admins').select('profile_id').eq('profile_id', activeSession.user.id).maybeSingle(),
         ]);
 
         if (tournamentResult.error) throw tournamentResult.error;
+        if (appAdminResult.error) throw appAdminResult.error;
 
         const loadedTournaments = (tournamentResult.data ?? []) as Tournament[];
         setProfile(loadedProfile);
         setTournaments(loadedTournaments);
+        setIsAppAdmin(Boolean(appAdminResult.data));
 
         if (!selectedTournamentId && loadedTournaments.length > 0) {
           setSelectedTournamentId(loadedTournaments[0].id);
@@ -156,6 +177,37 @@ export default function AdminPortal() {
     },
     [selectedTournamentId],
   );
+
+  const loadClaimRequests = useCallback(async () => {
+    try {
+      const requestsResult = await supabase
+        .from('historical_claim_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (requestsResult.error) throw requestsResult.error;
+
+      const loadedRequests = (requestsResult.data ?? []) as HistoricalClaimRequest[];
+      const participantIds = Array.from(new Set(loadedRequests.map((request) => request.historical_participant_id)));
+      const requesterIds = Array.from(new Set(loadedRequests.map((request) => request.requester_profile_id)));
+
+      const [participantsResult, requesterProfilesResult] = await Promise.all([
+        participantIds.length
+          ? supabase.from('historical_participants').select('*').in('id', participantIds)
+          : { data: [], error: null },
+        requesterIds.length ? supabase.from('profiles').select('*').in('id', requesterIds) : { data: [], error: null },
+      ]);
+
+      if (participantsResult.error) throw participantsResult.error;
+      if (requesterProfilesResult.error) throw requesterProfilesResult.error;
+
+      setClaimRequests(loadedRequests);
+      setClaimParticipants((participantsResult.data ?? []) as HistoricalParticipant[]);
+      setClaimRequesterProfiles((requesterProfilesResult.data ?? []) as Profile[]);
+    } catch (error) {
+      setMessage(getErrorMessage(error, 'Unable to load profile claim requests.'));
+    }
+  }, []);
 
   const loadTournamentData = useCallback(async (tournamentId: string) => {
     if (!tournamentId) return;
@@ -193,6 +245,15 @@ export default function AdminPortal() {
     if (!session) return;
     loadTournaments(session);
   }, [loadTournaments, session]);
+
+  useEffect(() => {
+    if (session && isAppAdmin) loadClaimRequests();
+    if (!isAppAdmin) {
+      setClaimRequests([]);
+      setClaimParticipants([]);
+      setClaimRequesterProfiles([]);
+    }
+  }, [isAppAdmin, loadClaimRequests, session]);
 
   useEffect(() => {
     if (selectedTournamentId) loadTournamentData(selectedTournamentId);
@@ -564,6 +625,22 @@ export default function AdminPortal() {
       setMessage('Participant promoted to co-admin.');
     });
 
+  const handleReviewClaimRequest = (requestId: string, approve: boolean) =>
+    runAdminAction(async () => {
+      if (!isAppAdmin) throw new Error('Only app admins can review historical profile claims.');
+
+      const { error } = await supabase.rpc('review_historical_claim_request', {
+        target_request_id: requestId,
+        approve_request: approve,
+        review_note: approve ? 'Approved in FanVerdict admin console.' : 'Rejected in FanVerdict admin console.',
+      });
+
+      if (error) throw error;
+
+      await loadClaimRequests();
+      setMessage(approve ? 'Historical profile claim approved.' : 'Historical profile claim rejected.');
+    });
+
   if (!isSupabaseConfigured) {
     return (
       <main className="min-h-screen bg-slate-50 p-6">
@@ -658,6 +735,87 @@ export default function AdminPortal() {
             {message}
           </div>
         )}
+
+        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-bold">
+                <UserCheck size={18} />
+                Historical Profile Claims
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Review participant requests to link historical standings to signed-in FanVerdict accounts.
+              </p>
+            </div>
+            {isAppAdmin && (
+              <button
+                onClick={loadClaimRequests}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+              >
+                <RefreshCcw size={16} />
+                Refresh claims
+              </button>
+            )}
+          </div>
+
+          {!isAppAdmin ? (
+            <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              App-admin access is required to approve historical profile claims.
+            </p>
+          ) : pendingClaimRequests.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No pending profile claim requests.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Historical Profile</th>
+                    <th className="px-4 py-3">Requested By</th>
+                    <th className="px-4 py-3">Requested</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pendingClaimRequests.map((request) => {
+                    const participant = claimParticipantById.get(request.historical_participant_id);
+                    const requester = claimRequesterProfileById.get(request.requester_profile_id);
+
+                    return (
+                      <tr key={request.id}>
+                        <td className="px-4 py-3 font-semibold">{participant?.display_name ?? 'Unknown participant'}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold">{requester?.display_name ?? 'Unknown user'}</div>
+                          <div className="text-xs text-slate-500">{requester?.email ?? request.requester_profile_id}</div>
+                        </td>
+                        <td className="px-4 py-3">{formatDateTime(request.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              disabled={busy}
+                              onClick={() => handleReviewClaimRequest(request.id, true)}
+                              className="inline-flex h-9 items-center gap-2 rounded-md bg-green-600 px-3 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <CheckCircle2 size={14} />
+                              Approve
+                            </button>
+                            <button
+                              disabled={busy}
+                              onClick={() => handleReviewClaimRequest(request.id, false)}
+                              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-xs font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <XCircle size={14} />
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="flex items-center gap-2 font-bold">

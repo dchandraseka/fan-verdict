@@ -4,6 +4,9 @@ export type TournamentStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type MatchStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
 export type PollStatus = 'draft' | 'open' | 'locked' | 'settled' | 'cancelled';
 export type LedgerReason = 'correct_pick' | 'manual_adjustment' | 'historical_import';
+export type HistoricalEventType = 'game' | 'playoff' | 'bonus';
+export type HistoricalClaimStatus = 'unclaimed' | 'claimed' | 'blocked';
+export type HistoricalClaimRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 export type Profile = {
   id: string;
@@ -110,4 +113,81 @@ export type StandingRow = {
   correct_picks: number;
   settled_votes: number;
   accuracy: number;
+};
+
+export type HistoricalTournament = {
+  id: string;
+  name: string;
+  season_year: number;
+  sport: string;
+  source_file: string | null;
+  imported_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HistoricalParticipant = {
+  id: string;
+  display_name: string;
+  normalized_name: string;
+  claimed_profile_id: string | null;
+  claim_status: HistoricalClaimStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HistoricalStanding = {
+  historical_tournament_id: string;
+  tournament_name: string;
+  season_year: number;
+  historical_participant_id: string;
+  display_name: string;
+  claimed_profile_id: string | null;
+  claim_status: HistoricalClaimStatus;
+  total_points: number;
+  bonus_points: number | null;
+  correct_picks: number;
+  incorrect_picks: number;
+  missed_events: number;
+  participated_events: number;
+  total_events: number;
+  regular_correct_picks: number;
+  regular_incorrect_picks: number;
+  regular_missed_events: number;
+  regular_participated_events: number;
+  accuracy_percent: number;
+  regular_accuracy_percent: number;
+};
+
+export type HistoricalEventSummary = {
+  historical_tournament_id: string;
+  tournament_name: string;
+  season_year: number;
+  historical_event_id: string;
+  event_key: string;
+  label: string;
+  event_type: HistoricalEventType;
+  sort_order: number;
+  points_available: number;
+  submitted_vote_count: number;
+  winning_vote_count: number;
+  majority_threshold: number | null;
+  majority_result: 'majority_correct' | 'minority_correct' | null;
+  correct_option_label: string | null;
+  correct_count: number;
+  incorrect_count: number;
+  missed_count: number;
+};
+
+export type HistoricalClaimRequest = {
+  id: string;
+  historical_participant_id: string;
+  requester_profile_id: string;
+  status: HistoricalClaimRequestStatus;
+  request_note: string | null;
+  review_note: string | null;
+  reviewed_by_profile_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };

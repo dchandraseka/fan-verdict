@@ -5,6 +5,8 @@ import type { Session } from '@supabase/supabase-js';
 import {
   BarChart3,
   CalendarClock,
+  CheckCircle2,
+  History,
   LogOut,
   Mail,
   RefreshCcw,
@@ -12,13 +14,24 @@ import {
   Share2,
   Shield,
   Trophy,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import type { PointsLedger, Poll, Profile, Tournament, TournamentMember, Vote } from '@/lib/types';
+import type {
+  HistoricalEventSummary,
+  HistoricalStanding,
+  HistoricalTournament,
+  PointsLedger,
+  Poll,
+  Profile,
+  Tournament,
+  TournamentMember,
+  Vote,
+} from '@/lib/types';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -26,12 +39,18 @@ export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [historicalTournaments, setHistoricalTournaments] = useState<HistoricalTournament[]>([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [selectedHistoricalTournamentId, setSelectedHistoricalTournamentId] = useState('');
+  const [selectedTournamentKey, setSelectedTournamentKey] = useState('');
   const [members, setMembers] = useState<TournamentMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [ledger, setLedger] = useState<PointsLedger[]>([]);
+  const [historicalStandings, setHistoricalStandings] = useState<HistoricalStanding[]>([]);
+  const [historicalEvents, setHistoricalEvents] = useState<HistoricalEventSummary[]>([]);
+  const [isAppAdmin, setIsAppAdmin] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [message, setMessage] = useState('');
 
@@ -40,12 +59,45 @@ export default function Dashboard() {
     [selectedTournamentId, tournaments],
   );
 
+  const currentHistoricalTournament = useMemo(
+    () => historicalTournaments.find((tournament) => tournament.id === selectedHistoricalTournamentId) ?? null,
+    [historicalTournaments, selectedHistoricalTournamentId],
+  );
+
+  const selectedTournamentKind = selectedTournamentKey.startsWith('live:') ? 'live' : 'historical';
+
+  const tournamentOptions = useMemo(() => {
+    const historicalOptions = historicalTournaments.map((tournament) => ({
+      id: tournament.id,
+      key: `historical:${tournament.id}`,
+      kind: 'historical' as const,
+      name: tournament.name,
+      seasonYear: tournament.season_year,
+      createdAt: tournament.imported_at,
+    }));
+    const liveOptions = tournaments.map((tournament) => ({
+      id: tournament.id,
+      key: `live:${tournament.id}`,
+      kind: 'live' as const,
+      name: tournament.name,
+      seasonYear: tournament.season_year ?? 0,
+      createdAt: tournament.created_at,
+    }));
+
+    return [...historicalOptions, ...liveOptions].sort(
+      (a, b) =>
+        b.seasonYear - a.seasonYear ||
+        (a.kind === b.kind ? 0 : a.kind === 'live' ? -1 : 1) ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [historicalTournaments, tournaments]);
+
   const myMembership = useMemo(
     () => members.find((member) => member.user_id === session?.user.id && member.status === 'active') ?? null,
     [members, session?.user.id],
   );
 
-  const canAdmin = myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const canAdmin = isAppAdmin || myMembership?.role === 'owner' || myMembership?.role === 'admin';
 
   const profileById = useMemo(() => new Map(profiles.map((item) => [item.id, item])), [profiles]);
   const pollById = useMemo(() => new Map(polls.map((poll) => [poll.id, poll])), [polls]);
@@ -80,6 +132,16 @@ export default function Dashboard() {
     [votes],
   );
 
+  const historicalClaimedCount = useMemo(
+    () => historicalStandings.filter((row) => row.claimed_profile_id).length,
+    [historicalStandings],
+  );
+
+  const historicalBonusEvent = useMemo(
+    () => historicalEvents.find((event) => event.event_type === 'bonus') ?? null,
+    [historicalEvents],
+  );
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
 
@@ -96,19 +158,57 @@ export default function Dashboard() {
       setMessage('');
 
       try {
-        const [loadedProfile, tournamentResult] = await Promise.all([
+        const [loadedProfile, tournamentResult, historicalTournamentResult, appAdminResult] = await Promise.all([
           ensureProfile(activeSession),
           supabase.from('tournaments').select('*').order('created_at', { ascending: false }),
+          supabase.from('historical_tournaments').select('*').order('season_year', { ascending: false }),
+          supabase.from('app_admins').select('profile_id').eq('profile_id', activeSession.user.id).maybeSingle(),
         ]);
 
         if (tournamentResult.error) throw tournamentResult.error;
+        if (historicalTournamentResult.error) throw historicalTournamentResult.error;
+        if (appAdminResult.error) throw appAdminResult.error;
 
         const loadedTournaments = (tournamentResult.data ?? []) as Tournament[];
+        const loadedHistoricalTournaments = (historicalTournamentResult.data ?? []) as HistoricalTournament[];
         setProfile(loadedProfile);
         setTournaments(loadedTournaments);
+        setHistoricalTournaments(loadedHistoricalTournaments);
+        setIsAppAdmin(Boolean(appAdminResult.data));
 
-        if (!selectedTournamentId && loadedTournaments.length > 0) {
-          setSelectedTournamentId(loadedTournaments[0].id);
+        if (!selectedTournamentKey) {
+          const options = [
+            ...loadedHistoricalTournaments.map((tournament) => ({
+              key: `historical:${tournament.id}`,
+              kind: 'historical' as const,
+              id: tournament.id,
+              seasonYear: tournament.season_year,
+              createdAt: tournament.imported_at,
+            })),
+            ...loadedTournaments.map((tournament) => ({
+              key: `live:${tournament.id}`,
+              kind: 'live' as const,
+              id: tournament.id,
+              seasonYear: tournament.season_year ?? 0,
+              createdAt: tournament.created_at,
+            })),
+          ].sort(
+            (a, b) =>
+              b.seasonYear - a.seasonYear ||
+              (a.kind === b.kind ? 0 : a.kind === 'live' ? -1 : 1) ||
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+
+          const defaultOption = options[0];
+          if (defaultOption?.kind === 'historical') {
+            setSelectedTournamentKey(defaultOption.key);
+            setSelectedHistoricalTournamentId(defaultOption.id);
+            setSelectedTournamentId('');
+          } else if (defaultOption?.kind === 'live') {
+            setSelectedTournamentKey(defaultOption.key);
+            setSelectedTournamentId(defaultOption.id);
+            setSelectedHistoricalTournamentId('');
+          }
         }
 
         setLoadState('ready');
@@ -117,7 +217,7 @@ export default function Dashboard() {
         setMessage(getErrorMessage(error, 'Unable to load tournaments.'));
       }
     },
-    [selectedTournamentId],
+    [selectedTournamentKey],
   );
 
   const loadTournamentData = useCallback(async (tournamentId: string) => {
@@ -178,12 +278,18 @@ export default function Dashboard() {
     if (!session) {
       setProfile(null);
       setTournaments([]);
+      setHistoricalTournaments([]);
       setSelectedTournamentId('');
+      setSelectedHistoricalTournamentId('');
+      setSelectedTournamentKey('');
       setMembers([]);
       setProfiles([]);
       setPolls([]);
       setVotes([]);
       setLedger([]);
+      setHistoricalStandings([]);
+      setHistoricalEvents([]);
+      setIsAppAdmin(false);
       setLoadState('ready');
       return;
     }
@@ -191,9 +297,61 @@ export default function Dashboard() {
     loadTournaments(session);
   }, [loadTournaments, session]);
 
+  const loadHistoricalTournamentData = useCallback(async (tournamentId: string) => {
+    if (!tournamentId) return;
+
+    setLoadState('loading');
+    setMessage('');
+
+    try {
+      const [standingsResult, eventsResult] = await Promise.all([
+        supabase
+          .from('historical_standings')
+          .select('*')
+          .eq('historical_tournament_id', tournamentId)
+          .order('total_points', { ascending: false })
+          .order('accuracy_percent', { ascending: false })
+          .order('display_name', { ascending: true }),
+        supabase
+          .from('historical_event_summary')
+          .select('*')
+          .eq('historical_tournament_id', tournamentId)
+          .order('sort_order', { ascending: true }),
+      ]);
+
+      if (standingsResult.error) throw standingsResult.error;
+      if (eventsResult.error) throw eventsResult.error;
+
+      setHistoricalStandings((standingsResult.data ?? []) as HistoricalStanding[]);
+      setHistoricalEvents((eventsResult.data ?? []) as HistoricalEventSummary[]);
+      setMembers([]);
+      setProfiles([]);
+      setPolls([]);
+      setVotes([]);
+      setLedger([]);
+      setLoadState('ready');
+    } catch (error) {
+      setLoadState('error');
+      setMessage(getErrorMessage(error, 'Unable to load historical tournament data.'));
+    }
+  }, []);
+
   useEffect(() => {
-    if (selectedTournamentId) loadTournamentData(selectedTournamentId);
-  }, [loadTournamentData, selectedTournamentId]);
+    if (selectedTournamentKind === 'live' && selectedTournamentId) {
+      setHistoricalStandings([]);
+      setHistoricalEvents([]);
+      loadTournamentData(selectedTournamentId);
+    }
+    if (selectedTournamentKind === 'historical' && selectedHistoricalTournamentId) {
+      loadHistoricalTournamentData(selectedHistoricalTournamentId);
+    }
+  }, [
+    loadHistoricalTournamentData,
+    loadTournamentData,
+    selectedHistoricalTournamentId,
+    selectedTournamentId,
+    selectedTournamentKind,
+  ]);
 
   const handleJoinTournament = async () => {
     if (!session || !currentTournament) return;
@@ -289,16 +447,27 @@ export default function Dashboard() {
           </a>
 
           <div className="flex flex-wrap items-center gap-2">
-            {currentTournament && (
+            {tournamentOptions.length > 0 && (
               <select
-                value={selectedTournamentId}
-                onChange={(event) => setSelectedTournamentId(event.target.value)}
+                value={selectedTournamentKey}
+                onChange={(event) => {
+                  const key = event.target.value;
+                  const [kind, id] = key.split(':');
+                  setSelectedTournamentKey(key);
+                  if (kind === 'live') {
+                    setSelectedTournamentId(id);
+                    setSelectedHistoricalTournamentId('');
+                  } else {
+                    setSelectedHistoricalTournamentId(id);
+                    setSelectedTournamentId('');
+                  }
+                }}
                 className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
               >
-                {tournaments.map((tournament) => (
-                  <option key={tournament.id} value={tournament.id}>
-                    {tournament.name}
-                    {tournament.season_year ? ` (${tournament.season_year})` : ''} - created {formatDateTime(tournament.created_at)}
+                {tournamentOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.name}
+                    {option.seasonYear ? ` (${option.seasonYear})` : ''} - {option.kind === 'historical' ? 'historical' : 'live'}
                   </option>
                 ))}
               </select>
@@ -311,6 +480,16 @@ export default function Dashboard() {
               >
                 <Shield size={16} />
                 Admin
+              </a>
+            )}
+
+            {session && (
+              <a
+                href="/claim"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+              >
+                <UserCheck size={16} />
+                Claim profile
               </a>
             )}
 
@@ -370,11 +549,11 @@ export default function Dashboard() {
               <span className="text-xs text-slate-500">Sign up with email and password. Phone is optional for alerts.</span>
             </div>
           </section>
-        ) : tournaments.length === 0 && loadState !== 'loading' ? (
+        ) : tournamentOptions.length === 0 && loadState !== 'loading' ? (
           <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
             <h1 className="text-2xl font-bold">Create your first tournament</h1>
             <p className="mt-2 text-slate-600">
-              No tournaments exist yet. Use the admin console to create IPL 2026; the creator becomes the tournament owner.
+              No tournaments exist yet. Use the admin console to create a live tournament, or import historical standings.
             </p>
             <a
               href="/admin"
@@ -383,6 +562,177 @@ export default function Dashboard() {
               Open admin console
             </a>
           </section>
+        ) : selectedTournamentKind === 'historical' && currentHistoricalTournament ? (
+          <div className="space-y-6">
+            <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 text-xs font-bold uppercase text-blue-600">
+                      <History size={16} />
+                      Historical Tournament
+                    </p>
+                    <h1 className="mt-1 text-2xl font-bold">{currentHistoricalTournament.name}</h1>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Imported from {currentHistoricalTournament.source_file ?? 'historical scorebook'}. Signed in as{' '}
+                      {profile?.display_name ?? session.user.email}.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href="/claim"
+                      className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
+                    >
+                      <UserCheck size={16} />
+                      Claim profile
+                    </a>
+                    <button
+                      onClick={() => loadHistoricalTournamentData(currentHistoricalTournament.id)}
+                      className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100"
+                    >
+                      <RefreshCcw size={16} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Participants</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalStandings.length}</p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Events</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalEvents.length}</p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Claimed</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalClaimedCount}</p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Bonus Winner</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalBonusEvent?.correct_option_label ?? 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="flex items-center gap-2 font-bold">
+                  <CheckCircle2 size={18} />
+                  Claim status
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Claimed rows are linked to signed-in FanVerdict accounts. Unclaimed rows are historical names waiting for owner approval.
+                </p>
+                <div className="mt-4 grid gap-2 text-sm">
+                  <div className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-800">
+                    <span>Claimed profiles</span>
+                    <strong>{historicalClaimedCount}</strong>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+                    <span>Unclaimed profiles</span>
+                    <strong>{Math.max(historicalStandings.length - historicalClaimedCount, 0)}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <h2 className="flex items-center gap-2 font-bold">
+                  <BarChart3 size={18} />
+                  Historical Standings
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[920px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Rank</th>
+                      <th className="px-5 py-3">Participant</th>
+                      <th className="px-5 py-3">Claim</th>
+                      <th className="px-5 py-3">Points</th>
+                      <th className="px-5 py-3">Correct</th>
+                      <th className="px-5 py-3">Incorrect</th>
+                      <th className="px-5 py-3">Missed</th>
+                      <th className="px-5 py-3">Accuracy</th>
+                      <th className="px-5 py-3">Game Accuracy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {historicalStandings.map((row, index) => {
+                      const claimedByMe = row.claimed_profile_id === session.user.id;
+                      const claimed = Boolean(row.claimed_profile_id);
+                      const blocked = row.claim_status === 'blocked';
+
+                      return (
+                        <tr key={row.historical_participant_id} className={claimedByMe ? 'bg-blue-50/50' : undefined}>
+                          <td className="px-5 py-3 font-bold">#{index + 1}</td>
+                          <td className="px-5 py-3 font-semibold">{row.display_name}</td>
+                          <td className="px-5 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase ${
+                                claimedByMe
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : claimed
+                                    ? 'bg-green-100 text-green-700'
+                                    : blocked
+                                      ? 'bg-red-100 text-red-700'
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {claimedByMe ? 'Your profile' : claimed ? 'Claimed' : blocked ? 'Blocked' : 'Unclaimed'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
+                          <td className="px-5 py-3">{row.correct_picks}</td>
+                          <td className="px-5 py-3">{row.incorrect_picks}</td>
+                          <td className="px-5 py-3">{row.missed_events}</td>
+                          <td className="px-5 py-3">{row.accuracy_percent}%</td>
+                          <td className="px-5 py-3">{row.regular_accuracy_percent}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-5 py-4">
+                <h2 className="font-bold">Event Summary</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Event</th>
+                      <th className="px-5 py-3">Type</th>
+                      <th className="px-5 py-3">Correct</th>
+                      <th className="px-5 py-3">Incorrect</th>
+                      <th className="px-5 py-3">Missed</th>
+                      <th className="px-5 py-3">Majority</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {historicalEvents.slice().reverse().slice(0, 12).map((event) => (
+                      <tr key={event.historical_event_id}>
+                        <td className="px-5 py-3 font-semibold">{event.label}</td>
+                        <td className="px-5 py-3 capitalize">{event.event_type}</td>
+                        <td className="px-5 py-3">{event.correct_count}</td>
+                        <td className="px-5 py-3">{event.incorrect_count}</td>
+                        <td className="px-5 py-3">{event.missed_count}</td>
+                        <td className="px-5 py-3 capitalize">
+                          {event.majority_result ? event.majority_result.replace('_', ' ') : event.correct_option_label ?? 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         ) : (
           <div className="space-y-6">
             <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
