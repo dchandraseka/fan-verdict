@@ -2,13 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --fv-ink: #0f172a;
+  --fv-muted: #64748b;
+  --fv-blue: #2563eb;
+  --fv-blue-dark: #1d4ed8;
+  --fv-green: #16a34a;
+  --fv-orange: #f97316;
+  --fv-gold: #f59e0b;
+  --fv-card: rgba(255, 255, 255, 0.88);
+  --fv-line: rgba(148, 163, 184, 0.34);
+  --fv-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+}
+
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  background-color: rgb(248 250 252);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.16), transparent 30rem),
+    radial-gradient(circle at 92% 8%, rgba(249, 115, 22, 0.16), transparent 26rem),
+    linear-gradient(135deg, #f8fbff 0%, #eff6ff 45%, #fff7ed 100%);
+  color: var(--fv-ink);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -17,4 +38,154 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+  color: var(--fv-ink);
+}
+
+.min-h-screen.bg-slate-50 {
+  background:
+    radial-gradient(circle at 8% 2%, rgba(37, 99, 235, 0.14), transparent 28rem),
+    radial-gradient(circle at 95% 4%, rgba(22, 163, 74, 0.12), transparent 24rem),
+    radial-gradient(circle at 72% 88%, rgba(249, 115, 22, 0.12), transparent 26rem),
+    linear-gradient(135deg, #f8fbff 0%, #eef6ff 52%, #fff8ed 100%);
+}
+
+nav.border-b.bg-white {
+  background: rgba(255, 255, 255, 0.84);
+  border-color: rgba(37, 99, 235, 0.16);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+nav a:first-child {
+  color: var(--fv-ink);
+}
+
+.text-blue-600 {
+  color: var(--fv-blue);
+}
+
+.bg-blue-600 {
+  background-color: var(--fv-blue);
+  background-image: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+}
+
+.hover\:bg-blue-700:hover {
+  background-color: var(--fv-blue-dark);
+  background-image: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+}
+
+.bg-green-600 {
+  background-color: var(--fv-green);
+  background-image: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.18);
+}
+
+.hover\:bg-green-700:hover {
+  background-color: #15803d;
+  background-image: linear-gradient(135deg, #15803d 0%, #047857 100%);
+}
+
+.bg-slate-900 {
+  background-color: #0f172a;
+  background-image: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.hover\:bg-slate-800:hover {
+  background-color: #1e293b;
+  background-image: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+}
+
+.rounded-lg.border.border-slate-200.bg-white,
+.rounded-md.border.border-slate-200.bg-white,
+.rounded-lg.border.border-slate-200.bg-white.shadow-sm,
+.rounded-lg.border.border-slate-200.bg-white.p-5.shadow-sm,
+.rounded-lg.border.border-slate-200.bg-white.p-6.shadow-sm {
+  background: var(--fv-card);
+  border-color: var(--fv-line);
+  box-shadow: var(--fv-shadow);
+}
+
+.rounded-lg.border.border-slate-200.bg-white:hover {
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.rounded-md.border.border-slate-200.p-4 {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(239, 246, 255, 0.72));
+  border-color: rgba(37, 99, 235, 0.14);
+}
+
+.border-b.border-slate-200 {
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.border-slate-200 {
+  border-color: rgba(148, 163, 184, 0.36);
+}
+
+.border-slate-300 {
+  border-color: rgba(100, 116, 139, 0.34);
+}
+
+.bg-slate-50 {
+  background-color: rgba(248, 250, 252, 0.74);
+}
+
+thead.bg-slate-50 {
+  background: linear-gradient(90deg, rgba(239, 246, 255, 0.96), rgba(255, 247, 237, 0.92));
+}
+
+tbody tr {
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+tbody tr:hover {
+  background-color: rgba(37, 99, 235, 0.045);
+}
+
+input,
+select,
+textarea {
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.bg-blue-50 {
+  background-color: rgba(239, 246, 255, 0.94);
+  border-color: rgba(37, 99, 235, 0.22);
+}
+
+.bg-green-50 {
+  background-color: rgba(240, 253, 244, 0.94);
+}
+
+.bg-amber-50 {
+  background-color: rgba(255, 251, 235, 0.96);
+}
+
+.bg-blue-100 {
+  background-color: #dbeafe;
+}
+
+.bg-green-100 {
+  background-color: #dcfce7;
+}
+
+.bg-amber-100 {
+  background-color: #fef3c7;
+}
+
+.bg-slate-100 {
+  background-color: #eef2f7;
 }
