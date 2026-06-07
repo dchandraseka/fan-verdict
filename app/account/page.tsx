@@ -1,18 +1,49 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { ArrowLeft, KeyRound, Save, Trophy, UserRound } from 'lucide-react';
+import { ArrowLeft, Camera, KeyRound, Save, Trash2, Trophy, Upload, UserRound } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { validateOptionalInternationalPhone } from '@/lib/phone';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { NotificationChannel, Profile } from '@/lib/types';
 
+const PROFILE_PHOTO_BUCKET = 'profile-photos';
+const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
 function normalizeChannel(channel: NotificationChannel | string | null | undefined): NotificationChannel {
   if (channel === 'whatsapp') return 'phone';
   if (channel === 'phone' || channel === 'both' || channel === 'email') return channel;
   return 'email';
+}
+
+function profileInitials(name: string | null | undefined, fallback: string | null | undefined) {
+  const source = name?.trim() || fallback?.trim() || 'FanVerdict Player';
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'FV';
+}
+
+function photoExtension(file: File) {
+  if (file.type === 'image/jpeg') return 'jpg';
+  if (file.type === 'image/png') return 'png';
+  if (file.type === 'image/webp') return 'webp';
+  if (file.type === 'image/gif') return 'gif';
+  return file.name.split('.').pop()?.toLowerCase() || 'jpg';
+}
+
+function uniquePhotoPath(userId: string, file: File) {
+  const randomPart =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+
+  return `${userId}/${Date.now()}-${randomPart}.${photoExtension(file)}`;
 }
 
 export default function AccountSettingsPage() {
@@ -25,6 +56,13 @@ export default function AccountSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const profilePhotoUrl = useMemo(() => {
+    if (!profile?.avatar_path) return '';
+    return supabase.storage.from(PROFILE_PHOTO_BUCKET).getPublicUrl(profile.avatar_path).data.publicUrl;
+  }, [profile?.avatar_path]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -89,6 +127,101 @@ export default function AccountSettingsPage() {
       setMessage(getErrorMessage(error, 'Unable to save account settings.'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handlePhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!session) {
+      setMessage('Sign in before updating your profile photo.');
+      return;
+    }
+
+    if (!ALLOWED_PROFILE_PHOTO_TYPES.includes(file.type)) {
+      setMessage('Upload a JPG, PNG, WEBP, or GIF image.');
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_PHOTO_BYTES) {
+      setMessage('Profile photo must be 5 MB or smaller.');
+      return;
+    }
+
+    setPhotoBusy(true);
+    setMessage('');
+
+    const nextPath = uniquePhotoPath(session.user.id, file);
+    const previousPath = profile?.avatar_path;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(PROFILE_PHOTO_BUCKET)
+        .upload(nextPath, file, {
+          cacheControl: '3600',
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data, error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          avatar_path: nextPath,
+          email: session.user.email,
+        })
+        .eq('id', session.user.id)
+        .select('*')
+        .single();
+
+      if (profileError) {
+        await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([nextPath]);
+        throw profileError;
+      }
+
+      setProfile(data as Profile);
+      if (previousPath && previousPath !== nextPath) {
+        await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([previousPath]);
+      }
+      setMessage('Profile photo updated.');
+    } catch (error) {
+      setMessage(getErrorMessage(error, 'Unable to update profile photo.'));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const removeProfilePhoto = async () => {
+    if (!session || !profile?.avatar_path) return;
+
+    setPhotoBusy(true);
+    setMessage('');
+
+    const previousPath = profile.avatar_path;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          avatar_path: null,
+          email: session.user.email,
+        })
+        .eq('id', session.user.id)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      setProfile(data as Profile);
+      await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([previousPath]);
+      setMessage('Profile photo removed.');
+    } catch (error) {
+      setMessage(getErrorMessage(error, 'Unable to remove profile photo.'));
+    } finally {
+      setPhotoBusy(false);
     }
   };
 
@@ -191,10 +324,61 @@ export default function AccountSettingsPage() {
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="flex items-center gap-2 font-bold">
               <UserRound size={18} />
-              Communication Preferences
+              Profile and Communication
             </h2>
 
             <div className="mt-4 grid gap-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-2xl font-black text-blue-700">
+                    {profilePhotoUrl ? (
+                      <img
+                        src={profilePhotoUrl}
+                        alt={`${profile?.display_name ?? 'Profile'} photo`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      profileInitials(displayName, session.user.email)
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Camera size={16} />
+                      Profile photo
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">Upload a JPG, PNG, WEBP, or GIF image up to 5 MB.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        disabled={photoBusy}
+                        onClick={() => photoInputRef.current?.click()}
+                        className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Upload size={16} />
+                        {profile?.avatar_path ? 'Change photo' : 'Upload photo'}
+                      </button>
+                      {profile?.avatar_path && (
+                        <button
+                          disabled={photoBusy}
+                          onClick={removeProfilePhoto}
+                          className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Trash2 size={16} />
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handlePhotoSelected}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <label className="block">
                 <span className="text-sm font-semibold text-slate-700">Display name</span>
                 <input

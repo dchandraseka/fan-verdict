@@ -12,6 +12,7 @@ export type Profile = {
   id: string;
   display_name: string;
   email: string | null;
+  avatar_path: string | null;
   whatsapp_number: string | null;
   notification_channel: NotificationChannel;
   created_at: string;
