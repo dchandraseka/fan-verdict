@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
-import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
+import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortPollsByGameOrder, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type {
   HistoricalEventSummary,
@@ -116,10 +116,7 @@ export default function Dashboard() {
   );
 
   const openPolls = useMemo(
-    () =>
-      polls
-        .filter((poll) => poll.status !== 'settled' && poll.status !== 'cancelled')
-        .sort((a, b) => new Date(a.locks_at).getTime() - new Date(b.locks_at).getTime()),
+    () => sortPollsByGameOrder(polls.filter((poll) => poll.status !== 'settled' && poll.status !== 'cancelled')),
     [polls],
   );
 
@@ -242,7 +239,7 @@ export default function Dashboard() {
       if (ledgerResult.error) throw ledgerResult.error;
 
       const loadedMembers = (membersResult.data ?? []) as TournamentMember[];
-      const loadedPolls = (pollsResult.data ?? []) as Poll[];
+      const loadedPolls = sortPollsByGameOrder((pollsResult.data ?? []) as Poll[]);
       const loadedLedger = (ledgerResult.data ?? []) as PointsLedger[];
       const userIds = Array.from(new Set(loadedMembers.map((member) => member.user_id)));
       const pollIds = loadedPolls.map((poll) => poll.id);

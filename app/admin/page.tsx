@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
-import { formatDateTime, isPollLocked, optionLabel, sortedPollOptions } from '@/lib/fanverdict';
+import { formatDateTime, isPollLocked, optionLabel, sortPollsByGameOrder, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { HistoricalClaimRequest, HistoricalParticipant, Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
 
@@ -255,7 +255,7 @@ export default function AdminPortal() {
 
       setMembers(loadedMembers);
       setProfiles((profilesResult.data ?? []) as Profile[]);
-      setPolls((pollsResult.data ?? []) as Poll[]);
+      setPolls(sortPollsByGameOrder((pollsResult.data ?? []) as Poll[]));
     } catch (error) {
       setMessage(getErrorMessage(error, 'Unable to load tournament details.'));
     }

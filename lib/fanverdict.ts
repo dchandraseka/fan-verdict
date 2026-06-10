@@ -29,6 +29,19 @@ export function sortedPollOptions(poll: Pick<Poll, 'poll_options'>): PollOption[
   return (poll.poll_options ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
 }
 
+export function sortPollsByGameOrder<T extends Pick<Poll, 'locks_at' | 'created_at' | 'matches'>>(polls: T[]): T[] {
+  return polls.slice().sort((a, b) => {
+    const gameA = a.matches?.game_number ?? Number.MAX_SAFE_INTEGER;
+    const gameB = b.matches?.game_number ?? Number.MAX_SAFE_INTEGER;
+
+    return (
+      gameA - gameB ||
+      new Date(a.locks_at).getTime() - new Date(b.locks_at).getTime() ||
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  });
+}
+
 export function optionLabel(poll: Pick<Poll, 'poll_options'>, optionId: string | null | undefined) {
   const option = sortedPollOptions(poll).find((item) => item.id === optionId);
   if (option) return option.label;
