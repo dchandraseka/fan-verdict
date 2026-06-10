@@ -52,6 +52,17 @@ function normalizeOptionLabels(values: string[]) {
   return uniqueLabels;
 }
 
+function usesTieMatchOption(tournament: Pick<Tournament, 'name' | 'sport'> | null) {
+  if (!tournament) return false;
+
+  const label = `${tournament.name} ${tournament.sport}`.toLowerCase();
+  return ['fifa', 'world cup', 'football', 'soccer'].some((keyword) => label.includes(keyword));
+}
+
+function defaultMatchExtraOptions(tournament: Pick<Tournament, 'name' | 'sport'> | null) {
+  return usesTieMatchOption(tournament) ? ['Tie'] : [];
+}
+
 export default function AdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -102,6 +113,15 @@ export default function AdminPortal() {
     () => tournaments.find((tournament) => tournament.id === selectedTournamentId) ?? null,
     [selectedTournamentId, tournaments],
   );
+  const currentTournamentId = currentTournament?.id ?? '';
+  const currentTournamentName = currentTournament?.name ?? '';
+  const currentTournamentSport = currentTournament?.sport ?? '';
+
+  const matchDefaultExtraOptions = useMemo(
+    () => defaultMatchExtraOptions({ name: currentTournamentName, sport: currentTournamentSport }),
+    [currentTournamentName, currentTournamentSport],
+  );
+  const matchUsesTieOption = matchDefaultExtraOptions.length > 0;
 
   const myMembership = useMemo(
     () => members.find((member) => member.user_id === session?.user.id && member.status === 'active') ?? null,
@@ -260,6 +280,10 @@ export default function AdminPortal() {
   }, [loadTournamentData, selectedTournamentId]);
 
   useEffect(() => {
+    setMatchExtraOptions(matchDefaultExtraOptions);
+  }, [currentTournamentId, matchDefaultExtraOptions]);
+
+  useEffect(() => {
     if (!selectedResultPoll) {
       setResultOptionId('');
       setResultPoints('1');
@@ -335,7 +359,10 @@ export default function AdminPortal() {
       if (options.length < 2) throw new Error('At least two teams/options are required.');
 
       const lockTime = new Date(startsAt).toISOString();
-      const question = matchQuestion.trim() || `${options[0]} vs ${options[1]}: who will win?`;
+      const defaultQuestion = matchUsesTieOption
+        ? `${options[0]} vs ${options[1]}: what will be the result?`
+        : `${options[0]} vs ${options[1]}: who will win?`;
+      const question = matchQuestion.trim() || defaultQuestion;
       const { data: createdMatch, error: matchError } = await supabase
         .from('matches')
         .insert({
@@ -383,7 +410,7 @@ export default function AdminPortal() {
       setGameNumber('');
       setTeamA('');
       setTeamB('');
-      setMatchExtraOptions([]);
+      setMatchExtraOptions(matchDefaultExtraOptions);
       setStartsAt(defaultDateTimeLocal());
       setVenue('');
       await loadTournamentData(currentTournament.id);
@@ -872,7 +899,7 @@ export default function AdminPortal() {
                     value={matchQuestion}
                     onChange={(event) => setMatchQuestion(event.target.value)}
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                    placeholder="Who will win QF1?"
+                    placeholder={matchUsesTieOption ? 'USA vs Paraguay: what will be the result?' : 'Who will win QF1?'}
                   />
                 </label>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -892,7 +919,7 @@ export default function AdminPortal() {
                       value={teamA}
                       onChange={(event) => setTeamA(event.target.value)}
                       className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                      placeholder="RCB"
+                      placeholder={matchUsesTieOption ? 'USA' : 'RCB'}
                     />
                   </label>
                   <label className="block">
@@ -901,7 +928,7 @@ export default function AdminPortal() {
                       value={teamB}
                       onChange={(event) => setTeamB(event.target.value)}
                       className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                      placeholder="GT"
+                      placeholder={matchUsesTieOption ? 'Paraguay' : 'GT'}
                     />
                   </label>
                 </div>
@@ -917,7 +944,7 @@ export default function AdminPortal() {
                           )
                         }
                         className="h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                        placeholder="CSK"
+                        placeholder={matchDefaultExtraOptions[index] ?? (matchUsesTieOption ? 'Tie' : 'CSK')}
                       />
                       <button
                         onClick={() => setMatchExtraOptions((current) => current.filter((_item, itemIndex) => itemIndex !== index))}
@@ -1290,7 +1317,7 @@ export default function AdminPortal() {
         ) : (
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="font-bold">No tournament selected</h2>
-            <p className="mt-2 text-sm text-slate-600">Create IPL 2026 above to begin.</p>
+            <p className="mt-2 text-sm text-slate-600">Create a tournament above to begin.</p>
           </section>
         )}
       </main>
