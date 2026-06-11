@@ -24,9 +24,7 @@ export async function ensureProfile(activeSession: Session): Promise<Profile> {
       email: activeSession.user.email,
       display_name: fallbackName,
       whatsapp_number: activeSession.user.user_metadata?.whatsapp_number ?? null,
-      notification_channel: activeSession.user.user_metadata?.notification_channel === 'whatsapp'
-        ? 'phone'
-        : activeSession.user.user_metadata?.notification_channel ?? 'email',
+      notification_channel: activeSession.user.user_metadata?.notification_channel === 'none' ? 'none' : 'email',
     })
     .select('*')
     .single();

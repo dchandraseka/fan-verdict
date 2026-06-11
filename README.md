@@ -13,7 +13,8 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Vote changes until the poll lock time.
 - Admin result settlement with configurable points per correct vote.
 - Admin correction of poll questions, option names, venue, and lock time before a poll locks.
-- Account settings for password changes, phone number, and email/phone/both alert preference.
+- Account settings for password changes, phone number, and email reminder opt-in/opt-out.
+- Daily email reminders for tournament members with uncast picks.
 - Manual point adjustments through a ledger.
 - Vote audit log with participant, selected option, and timestamp.
 - Dashboard sharing links for browser share, WhatsApp, and email.
@@ -29,6 +30,11 @@ This project is intended to be pushed to GitHub and built by Vercel.
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+RESEND_API_KEY=your-resend-api-key
+REMINDER_FROM_EMAIL=FanVerdict <alerts@your-domain.com>
+CRON_SECRET=use-a-long-random-secret
+NEXT_PUBLIC_APP_URL=https://your-vercel-app.vercel.app
 ```
 
 3. In Supabase Auth settings, add your Vercel URL to the allowed URLs:
@@ -54,6 +60,16 @@ If the database was created with the original two-option prototype, run
 `supabase/migrate-dynamic-poll-options.sql` in the Supabase SQL Editor before
 deploying this code.
 
+Run `supabase/migrate-email-reminders.sql` in the Supabase SQL Editor before enabling
+the Vercel cron job. The cron route is `/api/cron/daily-reminders`; Vercel calls it
+hourly, and the app sends at most one reminder per member per tournament per day.
+Optional reminder settings:
+
+```bash
+REMINDER_TIME_ZONE=America/New_York
+REMINDER_LEAD_HOURS=4
+```
+
 ## Local Setup
 
 1. Install dependencies:
@@ -67,6 +83,11 @@ npm install
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+RESEND_API_KEY=your-resend-api-key
+REMINDER_FROM_EMAIL=FanVerdict <alerts@your-domain.com>
+CRON_SECRET=use-a-long-random-secret
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 3. Reset/create the Supabase app schema by running `supabase/reset.sql` in the Supabase SQL editor.
@@ -92,6 +113,7 @@ The core tables are:
 - `votes`
 - `points_ledger`
 - `audit_log`
+- `reminder_deliveries`
 
 Points are recorded in `points_ledger` instead of being stored only as a mutable total. This keeps match scoring, manual adjustments, and future historical imports auditable.
 
@@ -99,6 +121,6 @@ Points are recorded in `points_ledger` instead of being stored only as a mutable
 
 - Schedule import from a cricket data source.
 - Automated result sync.
-- WhatsApp/email reminder jobs.
+- WhatsApp reminder jobs.
 - Historical Google Sheet import.
 - Server-side scoring RPC or route for transactional settlement.

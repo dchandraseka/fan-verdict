@@ -9,6 +9,7 @@ create extension if not exists pgcrypto;
 drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists public.audit_log cascade;
+drop table if exists public.reminder_deliveries cascade;
 drop table if exists public.points_ledger cascade;
 drop table if exists public.votes cascade;
 drop table if exists public.poll_options cascade;
@@ -35,7 +36,7 @@ create table public.profiles (
   avatar_path text,
   whatsapp_number text,
   notification_channel text not null default 'email'
-    check (notification_channel in ('email', 'phone', 'both', 'whatsapp')),
+    check (notification_channel in ('email', 'none')),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -143,6 +144,23 @@ create table public.audit_log (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table public.reminder_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments(id) on delete cascade,
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  reminder_date date not null,
+  channel text not null default 'email' check (channel = 'email'),
+  delivery_status text not null default 'pending'
+    check (delivery_status in ('pending', 'sent', 'failed')),
+  email text,
+  open_poll_count integer not null default 0 check (open_poll_count >= 0),
+  sent_at timestamptz,
+  error_message text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (tournament_id, profile_id, reminder_date, channel)
+);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -177,6 +195,10 @@ create trigger votes_set_updated_at
 before update on public.votes
 for each row execute function public.set_updated_at();
 
+create trigger reminder_deliveries_set_updated_at
+before update on public.reminder_deliveries
+for each row execute function public.set_updated_at();
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -203,8 +225,8 @@ begin
     ),
     new.raw_user_meta_data->>'whatsapp_number',
     case
-      when new.raw_user_meta_data->>'notification_channel' = 'whatsapp' then 'phone'
-      else coalesce(new.raw_user_meta_data->>'notification_channel', 'email')
+      when new.raw_user_meta_data->>'notification_channel' = 'none' then 'none'
+      else 'email'
     end
   )
   on conflict (id) do update set
@@ -343,6 +365,7 @@ alter table public.poll_options enable row level security;
 alter table public.votes enable row level security;
 alter table public.points_ledger enable row level security;
 alter table public.audit_log enable row level security;
+alter table public.reminder_deliveries enable row level security;
 
 create policy "Authenticated users can read profiles"
 on public.profiles for select
@@ -558,5 +581,10 @@ with check (
   tournament_id is null
   or public.is_tournament_admin(tournament_id)
 );
+
+create policy "Admins can read reminder deliveries"
+on public.reminder_deliveries for select
+to authenticated
+using (public.is_tournament_admin(tournament_id));
 
 commit;

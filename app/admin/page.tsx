@@ -63,6 +63,11 @@ function defaultMatchExtraOptions(tournament: Pick<Tournament, 'name' | 'sport'>
   return usesTieMatchOption(tournament) ? ['Tie'] : [];
 }
 
+function reminderLabel(channel: string | null | undefined) {
+  if (channel === 'none') return 'No reminders';
+  return 'Email only';
+}
+
 export default function AdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -1305,7 +1310,7 @@ export default function AdminPortal() {
                           <td className="px-4 py-3 font-semibold">{memberProfile?.display_name ?? member.user_id}</td>
                           <td className="px-4 py-3 capitalize">{member.role}</td>
                           <td className="px-4 py-3">{formatDateTime(member.joined_at)}</td>
-                          <td className="px-4 py-3 capitalize">{memberProfile?.notification_channel ?? 'email'}</td>
+                          <td className="px-4 py-3">{reminderLabel(memberProfile?.notification_channel)}</td>
                         </tr>
                       );
                     })}

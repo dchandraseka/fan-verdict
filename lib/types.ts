@@ -1,4 +1,4 @@
-export type NotificationChannel = 'email' | 'phone' | 'both' | 'whatsapp';
+export type NotificationChannel = 'email' | 'none';
 export type TournamentRole = 'owner' | 'admin' | 'participant';
 export type TournamentStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type MatchStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';

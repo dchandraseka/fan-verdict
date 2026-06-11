@@ -33,6 +33,7 @@ end $$;
 
 truncate table
   public.audit_log,
+  public.reminder_deliveries,
   public.points_ledger,
   public.votes,
   public.poll_options,
@@ -43,4 +44,3 @@ truncate table
 restart identity cascade;
 
 commit;
-

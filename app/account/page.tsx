@@ -15,8 +15,7 @@ const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 function normalizeChannel(channel: NotificationChannel | string | null | undefined): NotificationChannel {
-  if (channel === 'whatsapp') return 'phone';
-  if (channel === 'phone' || channel === 'both' || channel === 'email') return channel;
+  if (channel === 'none') return 'none';
   return 'email';
 }
 
@@ -409,8 +408,7 @@ export default function AccountSettingsPage() {
                   className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-blue-500"
                 >
                   <option value="email">Email only</option>
-                  <option value="phone">Phone only</option>
-                  <option value="both">Email and phone</option>
+                  <option value="none">No reminders</option>
                 </select>
               </label>
 

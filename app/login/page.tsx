@@ -202,8 +202,7 @@ export default function LoginPage() {
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 outline-none focus:border-blue-500"
                   >
                     <option value="email">Email only</option>
-                    <option value="phone">Phone only</option>
-                    <option value="both">Email and phone</option>
+                    <option value="none">No reminders</option>
                   </select>
                 </label>
               </>
@@ -275,7 +274,7 @@ export default function LoginPage() {
             </button>
           ) : (
             <p className="mt-5 text-center text-xs text-slate-500">
-              Sign up uses email and password. Phone is optional and used only for future alerts.
+              Sign up uses email and password. Phone is optional and not used for email reminders.
             </p>
           )}
         </section>
