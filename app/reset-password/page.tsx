@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, KeyRound, Trophy } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { getErrorMessage } from '@/lib/errors';
@@ -9,6 +10,7 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 type ResetState = 'checking' | 'ready' | 'invalid' | 'updated';
 
 export default function ResetPasswordPage() {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [resetState, setResetState] = useState<ResetState>('checking');
   const [newPassword, setNewPassword] = useState('');
@@ -25,7 +27,9 @@ export default function ResetPasswordPage() {
     let active = true;
 
     const clearRecoveryUrl = () => {
-      window.history.replaceState({}, document.title, window.location.pathname);
+      if (window.location.search || window.location.hash) {
+        router.replace(window.location.pathname);
+      }
     };
 
     const loadRecoverySession = async () => {
@@ -101,7 +105,7 @@ export default function ResetPasswordPage() {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
   const updatePassword = async () => {
     if (!session) {
