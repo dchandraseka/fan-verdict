@@ -587,9 +587,9 @@ export default function Dashboard() {
         {!session ? (
           <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-[1.4fr_1fr] md:items-center">
             <div>
-              <h1 className="text-3xl font-bold tracking-normal">Make your tournament picks before each game locks.</h1>
+              <h1 className="text-3xl font-bold tracking-normal">FIFA World Cup 2026 Prediction League is LIVE!</h1>
               <p className="mt-3 max-w-2xl text-slate-600">
-                Join your group, vote on open polls, and track standings with timestamps for every vote.
+                Join the league, vote on open polls and track your standings.
               </p>
             </div>
             <div className="flex flex-col gap-2 md:items-end">
