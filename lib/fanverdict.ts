@@ -29,15 +29,20 @@ export function sortedPollOptions(poll: Pick<Poll, 'poll_options'>): PollOption[
   return (poll.poll_options ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
 }
 
-export function sortPollsByGameOrder<T extends Pick<Poll, 'locks_at' | 'created_at' | 'matches'>>(polls: T[]): T[] {
+export function sortPollsByGameOrder<T extends Pick<Poll, 'locks_at' | 'created_at' | 'matches'>>(
+  polls: T[],
+  direction: 'asc' | 'desc' = 'asc',
+): T[] {
+  const multiplier = direction === 'asc' ? 1 : -1;
+
   return polls.slice().sort((a, b) => {
-    const gameA = a.matches?.game_number ?? Number.MAX_SAFE_INTEGER;
-    const gameB = b.matches?.game_number ?? Number.MAX_SAFE_INTEGER;
+    const gameA = a.matches?.game_number ?? (direction === 'asc' ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER);
+    const gameB = b.matches?.game_number ?? (direction === 'asc' ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER);
 
     return (
-      gameA - gameB ||
-      new Date(a.locks_at).getTime() - new Date(b.locks_at).getTime() ||
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (gameA - gameB) * multiplier ||
+      (new Date(a.locks_at).getTime() - new Date(b.locks_at).getTime()) * multiplier ||
+      (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * multiplier
     );
   });
 }

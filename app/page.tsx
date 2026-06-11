@@ -34,6 +34,7 @@ import type {
 } from '@/lib/types';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type LiveDashboardSection = 'participants' | 'openPolls' | 'settledPolls';
 
 export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -53,6 +54,7 @@ export default function Dashboard() {
   const [isAppAdmin, setIsAppAdmin] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [message, setMessage] = useState('');
+  const [liveDashboardSection, setLiveDashboardSection] = useState<LiveDashboardSection>('openPolls');
 
   const currentTournament = useMemo(
     () => tournaments.find((tournament) => tournament.id === selectedTournamentId) ?? null,
@@ -101,6 +103,14 @@ export default function Dashboard() {
 
   const profileById = useMemo(() => new Map(profiles.map((item) => [item.id, item])), [profiles]);
   const pollById = useMemo(() => new Map(polls.map((poll) => [poll.id, poll])), [polls]);
+  const activeMembers = useMemo(
+    () =>
+      members
+        .filter((member) => member.status === 'active')
+        .slice()
+        .sort((a, b) => new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()),
+    [members],
+  );
 
   const myVotes = useMemo(() => {
     const voteMap = new Map<string, Vote>();
@@ -116,9 +126,22 @@ export default function Dashboard() {
   );
 
   const openPolls = useMemo(
-    () => sortPollsByGameOrder(polls.filter((poll) => poll.status !== 'settled' && poll.status !== 'cancelled')),
+    () => sortPollsByGameOrder(polls.filter((poll) => poll.status === 'open' && !isPollLocked(poll))),
     [polls],
   );
+  const settledPolls = useMemo(
+    () => sortPollsByGameOrder(polls.filter((poll) => poll.status === 'settled'), 'desc'),
+    [polls],
+  );
+  const visibleLivePolls = liveDashboardSection === 'settledPolls' ? settledPolls : openPolls;
+  const liveDetailHeading =
+    liveDashboardSection === 'participants' ? 'Participants' : liveDashboardSection === 'settledPolls' ? 'Settled Polls' : 'Open Polls';
+  const liveDetailDescription =
+    liveDashboardSection === 'participants'
+      ? 'Active members who joined this tournament.'
+      : liveDashboardSection === 'settledPolls'
+        ? 'Completed poll results, newest game first.'
+        : 'Available polls, sorted by game number ascending.';
 
   const recentVotes = useMemo(
     () =>
@@ -413,6 +436,13 @@ export default function Dashboard() {
 
     await navigator.clipboard?.writeText(shareText);
     setMessage('Dashboard link copied.');
+  };
+
+  const handleLiveDashboardSection = (section: LiveDashboardSection) => {
+    setLiveDashboardSection(section);
+    window.requestAnimationFrame(() => {
+      document.getElementById('live-dashboard-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const handleLogout = async () => {
@@ -765,18 +795,33 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-md border border-slate-200 p-4">
+                  <button
+                    onClick={() => handleLiveDashboardSection('participants')}
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
+                      liveDashboardSection === 'participants' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
+                    }`}
+                  >
                     <p className="text-xs font-semibold uppercase text-slate-500">Participants</p>
-                    <p className="mt-1 text-2xl font-bold">{members.filter((member) => member.status === 'active').length}</p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="mt-1 text-2xl font-bold">{activeMembers.length}</p>
+                  </button>
+                  <button
+                    onClick={() => handleLiveDashboardSection('openPolls')}
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
+                      liveDashboardSection === 'openPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
+                    }`}
+                  >
                     <p className="text-xs font-semibold uppercase text-slate-500">Open Polls</p>
-                    <p className="mt-1 text-2xl font-bold">{openPolls.filter((poll) => !isPollLocked(poll)).length}</p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 p-4">
+                    <p className="mt-1 text-2xl font-bold">{openPolls.length}</p>
+                  </button>
+                  <button
+                    onClick={() => handleLiveDashboardSection('settledPolls')}
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
+                      liveDashboardSection === 'settledPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
+                    }`}
+                  >
                     <p className="text-xs font-semibold uppercase text-slate-500">Settled Polls</p>
-                    <p className="mt-1 text-2xl font-bold">{polls.filter((poll) => poll.status === 'settled').length}</p>
-                  </div>
+                    <p className="mt-1 text-2xl font-bold">{settledPolls.length}</p>
+                  </button>
                 </div>
               </div>
 
@@ -813,71 +858,115 @@ export default function Dashboard() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="live-dashboard-detail" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
-                  <CalendarClock size={18} />
-                  Polls
+                  {liveDashboardSection === 'participants' ? <Users size={18} /> : <CalendarClock size={18} />}
+                  {liveDetailHeading}
                 </h2>
-                <span className="text-sm text-slate-500">Votes can be changed until the listed lock time.</span>
+                <span className="text-sm text-slate-500">{liveDetailDescription}</span>
               </div>
 
-              <div className="grid gap-4 p-5 lg:grid-cols-2">
-                {openPolls.length === 0 ? (
-                  <p className="text-sm text-slate-500">No open or locked polls yet.</p>
-                ) : (
-                  openPolls.map((poll) => {
-                    const locked = isPollLocked(poll);
-                    const currentVote = myVotes.get(poll.id);
-                    const options = sortedPollOptions(poll);
+              {liveDashboardSection === 'participants' ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">Participant</th>
+                        <th className="px-5 py-3">Role</th>
+                        <th className="px-5 py-3">Joined</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeMembers.length === 0 ? (
+                        <tr>
+                          <td className="px-5 py-4 text-slate-500" colSpan={3}>
+                            No participants have joined this tournament yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        activeMembers.map((member) => (
+                          <tr key={member.id}>
+                            <td className="px-5 py-3 font-semibold">{profileById.get(member.user_id)?.display_name ?? 'Unknown player'}</td>
+                            <td className="px-5 py-3 capitalize text-slate-600">{member.role}</td>
+                            <td className="px-5 py-3">{formatDateTime(member.joined_at)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="grid gap-4 p-5 lg:grid-cols-2">
+                  {visibleLivePolls.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      {liveDashboardSection === 'settledPolls' ? 'No settled polls yet.' : 'No open polls are available right now.'}
+                    </p>
+                  ) : (
+                    visibleLivePolls.map((poll) => {
+                      const settled = poll.status === 'settled';
+                      const locked = settled || isPollLocked(poll);
+                      const currentVote = myVotes.get(poll.id);
+                      const options = sortedPollOptions(poll);
 
-                    return (
-                      <article key={poll.id} className="rounded-lg border border-slate-200 p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-bold uppercase text-slate-500">
-                              {poll.matches?.game_number ? `Game ${poll.matches.game_number}` : 'Manual Poll'}
-                            </p>
-                            <h3 className="mt-1 text-lg font-bold">{poll.question}</h3>
-                            <p className="mt-1 text-sm text-slate-600">Locks: {formatDateTime(poll.locks_at)}</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                              Worth {poll.points_per_correct || 1} point{(poll.points_per_correct || 1) === 1 ? '' : 's'}
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${
-                              locked ? 'bg-slate-100 text-slate-600' : 'bg-green-100 text-green-700'
-                            }`}
-                          >
-                            {locked ? poll.status : 'open'}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                          {options.map((option) => (
-                            <button
-                              key={option.id}
-                              disabled={locked || !myMembership}
-                              onClick={() => handleVote(poll, option.id)}
-                              className={`min-h-12 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                                currentVote?.selected_option_id === option.id
-                                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-                              } disabled:cursor-not-allowed disabled:opacity-55`}
+                      return (
+                        <article key={poll.id} className="rounded-lg border border-slate-200 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-bold uppercase text-slate-500">
+                                {poll.matches?.game_number ? `Game ${poll.matches.game_number}` : 'Manual Poll'}
+                              </p>
+                              <h3 className="mt-1 text-lg font-bold">{poll.question}</h3>
+                              <p className="mt-1 text-sm text-slate-600">Locks: {formatDateTime(poll.locks_at)}</p>
+                              {settled && (
+                                <p className="mt-1 text-sm font-semibold text-green-700">
+                                  Result: {optionLabel(poll, poll.result_option_id)}
+                                </p>
+                              )}
+                              <p className="mt-1 text-xs font-semibold text-slate-500">
+                                Worth {poll.points_per_correct || 1} point{(poll.points_per_correct || 1) === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${
+                                settled ? 'bg-green-100 text-green-700' : locked ? 'bg-slate-100 text-slate-600' : 'bg-green-100 text-green-700'
+                              }`}
                             >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
+                              {settled ? 'settled' : locked ? poll.status : 'open'}
+                            </span>
+                          </div>
 
-                        <p className="mt-3 text-xs text-slate-500">
-                          Your vote: {currentVote ? `${optionLabel(poll, currentVote.selected_option_id)} at ${formatDateTime(currentVote.updated_at)}` : 'Not cast'}
-                        </p>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
+                          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                            {options.map((option) => (
+                              <button
+                                key={option.id}
+                                disabled={locked || !myMembership}
+                                onClick={() => handleVote(poll, option.id)}
+                                className={`min-h-12 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                                  poll.result_option_id === option.id
+                                    ? 'border-green-600 bg-green-50 text-green-700'
+                                    : currentVote?.selected_option_id === option.id
+                                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                      : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
+                                } disabled:cursor-not-allowed disabled:opacity-55`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <p className="mt-3 text-xs text-slate-500">
+                            Your vote:{' '}
+                            {currentVote
+                              ? `${optionLabel(poll, currentVote.selected_option_id)} at ${formatDateTime(currentVote.updated_at)}`
+                              : 'Not cast'}
+                          </p>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
