@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [message, setMessage] = useState('');
   const [liveDashboardSection, setLiveDashboardSection] = useState<LiveDashboardSection>('openPolls');
+  const [expandedVotePollIds, setExpandedVotePollIds] = useState<Set<string>>(() => new Set());
 
   const currentTournament = useMemo(
     () => tournaments.find((tournament) => tournament.id === selectedTournamentId) ?? null,
@@ -111,6 +112,7 @@ export default function Dashboard() {
         .sort((a, b) => new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()),
     [members],
   );
+  const activeMemberIds = useMemo(() => new Set(activeMembers.map((member) => member.user_id)), [activeMembers]);
 
   const myVotes = useMemo(() => {
     const voteMap = new Map<string, Vote>();
@@ -124,6 +126,17 @@ export default function Dashboard() {
     () => calculateStandings(members, profiles, votes, polls, ledger),
     [ledger, members, polls, profiles, votes],
   );
+  const votesByPollId = useMemo(() => {
+    const voteMap = new Map<string, Vote[]>();
+
+    for (const vote of votes) {
+      const pollVotes = voteMap.get(vote.poll_id) ?? [];
+      pollVotes.push(vote);
+      voteMap.set(vote.poll_id, pollVotes);
+    }
+
+    return voteMap;
+  }, [votes]);
 
   const openPolls = useMemo(
     () => sortPollsByGameOrder(polls.filter((poll) => poll.status === 'open' && !isPollLocked(poll))),
@@ -357,6 +370,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    setExpandedVotePollIds(new Set());
+
     if (selectedTournamentKind === 'live' && selectedTournamentId) {
       setHistoricalStandings([]);
       setHistoricalEvents([]);
@@ -442,6 +457,18 @@ export default function Dashboard() {
     setLiveDashboardSection(section);
     window.requestAnimationFrame(() => {
       document.getElementById('live-dashboard-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const toggleVoteDetails = (pollId: string) => {
+    setExpandedVotePollIds((current) => {
+      const next = new Set(current);
+      if (next.has(pollId)) {
+        next.delete(pollId);
+      } else {
+        next.add(pollId);
+      }
+      return next;
     });
   };
 
@@ -908,6 +935,12 @@ export default function Dashboard() {
                       const locked = settled || isPollLocked(poll);
                       const currentVote = myVotes.get(poll.id);
                       const options = sortedPollOptions(poll);
+                      const votesForPoll = (votesByPollId.get(poll.id) ?? []).filter((vote) => activeMemberIds.has(vote.user_id));
+                      const totalVotes = votesForPoll.length;
+                      const votedMemberIds = new Set(votesForPoll.map((vote) => vote.user_id));
+                      const notVotedMembers = activeMembers.filter((member) => !votedMemberIds.has(member.user_id));
+                      const voteDetailsExpanded = expandedVotePollIds.has(poll.id);
+                      const canVote = !locked && Boolean(myMembership);
 
                       return (
                         <article key={poll.id} className="rounded-lg border border-slate-200 p-4">
@@ -936,31 +969,114 @@ export default function Dashboard() {
                             </span>
                           </div>
 
-                          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                            {options.map((option) => (
-                              <button
-                                key={option.id}
-                                disabled={locked || !myMembership}
-                                onClick={() => handleVote(poll, option.id)}
-                                className={`min-h-12 rounded-md border px-3 py-2 text-sm font-bold transition ${
-                                  poll.result_option_id === option.id
-                                    ? 'border-green-600 bg-green-50 text-green-700'
-                                    : currentVote?.selected_option_id === option.id
-                                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                      : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-                                } disabled:cursor-not-allowed disabled:opacity-55`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
+                          <div className="mt-4 grid gap-2">
+                            {options.map((option) => {
+                              const optionVotes = votesForPoll.filter((vote) => vote.selected_option_id === option.id);
+                              const votePercent = totalVotes ? Math.round((optionVotes.length / totalVotes) * 100) : 0;
+                              const isWinningOption = poll.result_option_id === option.id;
+                              const isMyVote = currentVote?.selected_option_id === option.id;
+
+                              return (
+                                <button
+                                  key={option.id}
+                                  disabled={!canVote}
+                                  onClick={() => handleVote(poll, option.id)}
+                                  className={`relative min-h-14 overflow-hidden rounded-md border px-3 py-2 text-left text-sm font-bold transition ${
+                                    isWinningOption
+                                      ? 'border-green-600 text-green-800'
+                                      : isMyVote
+                                        ? 'border-blue-600 text-blue-800'
+                                        : 'border-slate-300 text-slate-800 hover:bg-slate-50'
+                                  } disabled:cursor-not-allowed`}
+                                >
+                                  <span
+                                    className={`absolute inset-y-0 left-0 ${
+                                      isWinningOption ? 'bg-green-100' : isMyVote ? 'bg-blue-100' : 'bg-slate-100'
+                                    }`}
+                                    style={{ width: `${votePercent}%` }}
+                                  />
+                                  <span className="relative flex items-center justify-between gap-3">
+                                    <span>{option.label}</span>
+                                    <span className="shrink-0 text-xs font-semibold text-slate-600">
+                                      {optionVotes.length} vote{optionVotes.length === 1 ? '' : 's'} - {votePercent}%
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
 
-                          <p className="mt-3 text-xs text-slate-500">
-                            Your vote:{' '}
-                            {currentVote
-                              ? `${optionLabel(poll, currentVote.selected_option_id)} at ${formatDateTime(currentVote.updated_at)}`
-                              : 'Not cast'}
-                          </p>
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                            <p>
+                              Your vote:{' '}
+                              {currentVote
+                                ? `${optionLabel(poll, currentVote.selected_option_id)} at ${formatDateTime(currentVote.updated_at)}`
+                                : 'Not cast'}
+                            </p>
+                            <button
+                              onClick={() => toggleVoteDetails(poll.id)}
+                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                            >
+                              {voteDetailsExpanded ? 'Hide votes' : 'View votes'}
+                            </button>
+                          </div>
+
+                          {voteDetailsExpanded && (
+                            <div className="mt-4 border-t border-slate-200 pt-4 text-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-bold text-slate-900">Vote breakdown</p>
+                                <p className="text-xs font-semibold text-slate-500">
+                                  {totalVotes} of {activeMembers.length} participant{activeMembers.length === 1 ? '' : 's'} voted
+                                </p>
+                              </div>
+
+                              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                                {options.map((option) => {
+                                  const optionVoters = activeMembers.filter((member) =>
+                                    votesForPoll.some((vote) => vote.user_id === member.user_id && vote.selected_option_id === option.id),
+                                  );
+
+                                  return (
+                                    <div key={`votes-${poll.id}-${option.id}`} className="min-w-0">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="truncate font-semibold">{option.label}</p>
+                                        <span className="text-xs font-bold text-slate-500">{optionVoters.length}</span>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {optionVoters.length === 0 ? (
+                                          <span className="text-xs text-slate-500">No votes</span>
+                                        ) : (
+                                          optionVoters.map((member) => (
+                                            <span key={`${option.id}-${member.user_id}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                              {profileById.get(member.user_id)?.display_name ?? 'Unknown player'}
+                                            </span>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                <div className="min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate font-semibold">Not voted</p>
+                                    <span className="text-xs font-bold text-slate-500">{notVotedMembers.length}</span>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {notVotedMembers.length === 0 ? (
+                                      <span className="text-xs text-slate-500">Everyone has voted</span>
+                                    ) : (
+                                      notVotedMembers.map((member) => (
+                                        <span key={`not-voted-${poll.id}-${member.user_id}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                          {profileById.get(member.user_id)?.display_name ?? 'Unknown player'}
+                                        </span>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </article>
                       );
                     })
