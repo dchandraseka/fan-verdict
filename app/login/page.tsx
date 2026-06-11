@@ -8,7 +8,7 @@ import { validateOptionalInternationalPhone } from '@/lib/phone';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { NotificationChannel } from '@/lib/types';
 
-type AuthMode = 'sign-in' | 'sign-up';
+type AuthMode = 'sign-in' | 'sign-up' | 'forgot-password';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,11 +24,33 @@ export default function LoginPage() {
   const phoneValidation = validateOptionalInternationalPhone(whatsappNumber);
   const emailValue = email.trim();
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
-  const canSubmit = !busy && emailLooksValid && password.length >= 6 && (mode === 'sign-in' || phoneValidation.ok);
+  const canSubmit =
+    !busy && emailLooksValid && (mode === 'forgot-password' || (password.length >= 6 && (mode === 'sign-in' || phoneValidation.ok)));
 
   const handleEmailAuth = async () => {
     if (!emailLooksValid) {
       setMessage('Enter a valid email address.');
+      return;
+    }
+
+    if (mode === 'forgot-password') {
+      setBusy(true);
+      setMessage('');
+
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(emailValue, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+
+        if (error) throw error;
+
+        setMessage('If an account exists for that email, a password reset link has been sent.');
+      } catch (error) {
+        setMessage(getErrorMessage(error, 'Unable to send reset link.'));
+      } finally {
+        setBusy(false);
+      }
+
       return;
     }
 
@@ -119,7 +141,7 @@ export default function LoginPage() {
                 setMode('sign-in');
                 setMessage('');
               }}
-              className={`h-10 rounded px-3 text-sm font-bold ${mode === 'sign-in' ? 'bg-white shadow-sm' : 'text-slate-600'}`}
+              className={`h-10 rounded px-3 text-sm font-bold ${mode !== 'sign-up' ? 'bg-white shadow-sm' : 'text-slate-600'}`}
             >
               Sign in
             </button>
@@ -135,6 +157,13 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-6 space-y-4">
+            {mode === 'forgot-password' && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+                <h2 className="text-sm font-bold text-blue-950">Reset password</h2>
+                <p className="mt-1 text-sm text-blue-900">Enter your account email and check your inbox for the reset link.</p>
+              </div>
+            )}
+
             {mode === 'sign-up' && (
               <>
                 <label className="block">
@@ -194,19 +223,33 @@ export default function LoginPage() {
               )}
             </label>
 
-            <label className="block">
-              <span className="text-sm font-semibold text-slate-700">Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
-                placeholder="At least 6 characters"
-              />
-              {password && password.length < 6 && (
-                <span className="mt-1 block text-xs font-semibold text-red-600">Password must be at least 6 characters.</span>
-              )}
-            </label>
+            {mode !== 'forgot-password' && (
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"
+                  placeholder="At least 6 characters"
+                />
+                {password && password.length < 6 && (
+                  <span className="mt-1 block text-xs font-semibold text-red-600">Password must be at least 6 characters.</span>
+                )}
+              </label>
+            )}
+
+            {mode === 'sign-in' && (
+              <button
+                onClick={() => {
+                  setMode('forgot-password');
+                  setMessage('');
+                }}
+                className="text-sm font-semibold text-blue-700 hover:text-blue-800"
+              >
+                Forgot password?
+              </button>
+            )}
 
             {message && <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-950">{message}</p>}
 
@@ -215,14 +258,26 @@ export default function LoginPage() {
               onClick={handleEmailAuth}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {mode === 'sign-in' ? 'Sign in' : 'Create account'}
+              {mode === 'forgot-password' ? 'Send reset link' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
               <ArrowRight size={18} />
             </button>
           </div>
 
-          <p className="mt-5 text-center text-xs text-slate-500">
-            Sign up uses email and password. Phone is optional and used only for future alerts.
-          </p>
+          {mode === 'forgot-password' ? (
+            <button
+              onClick={() => {
+                setMode('sign-in');
+                setMessage('');
+              }}
+              className="mt-5 w-full text-center text-xs font-semibold text-slate-600 hover:text-slate-950"
+            >
+              Back to sign in
+            </button>
+          ) : (
+            <p className="mt-5 text-center text-xs text-slate-500">
+              Sign up uses email and password. Phone is optional and used only for future alerts.
+            </p>
+          )}
         </section>
       </div>
     </main>
