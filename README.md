@@ -31,8 +31,8 @@ This project is intended to be pushed to GitHub and built by Vercel.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-RESEND_API_KEY=your-resend-api-key
-REMINDER_FROM_EMAIL=FanVerdict <alerts@your-domain.com>
+GMAIL_USER=your-gmail-address
+GMAIL_APP_PASSWORD=your-gmail-app-password
 CRON_SECRET=use-a-long-random-secret
 NEXT_PUBLIC_APP_URL=https://your-vercel-app.vercel.app
 ```
@@ -62,12 +62,13 @@ deploying this code.
 
 Run `supabase/migrate-email-reminders.sql` in the Supabase SQL Editor before enabling
 the Vercel cron job. The cron route is `/api/cron/daily-reminders`; Vercel calls it
-hourly, and the app sends at most one reminder per member per tournament per day.
+daily at 11:00 UTC, which is 7:00 AM New York time during daylight saving time and
+6:00 AM New York time during standard time. The app sends at most one reminder per
+member per tournament per day.
 Optional reminder settings:
 
 ```bash
 REMINDER_TIME_ZONE=America/New_York
-REMINDER_LEAD_HOURS=4
 ```
 
 ## Local Setup
@@ -84,8 +85,8 @@ npm install
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-RESEND_API_KEY=your-resend-api-key
-REMINDER_FROM_EMAIL=FanVerdict <alerts@your-domain.com>
+GMAIL_USER=your-gmail-address
+GMAIL_APP_PASSWORD=your-gmail-app-password
 CRON_SECRET=use-a-long-random-secret
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```

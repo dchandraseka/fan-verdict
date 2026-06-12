@@ -6,7 +6,6 @@ import type { Poll, PointsLedger, Profile, StandingRow, Tournament, TournamentMe
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_REMINDER_LEAD_HOURS = 4;
 const DEFAULT_REMINDER_TIME_ZONE = 'America/New_York';
 const LEADERBOARD_ROW_LIMIT = 5;
 const SETTLED_POLL_LIMIT = 3;
@@ -28,20 +27,13 @@ type LocalDateParts = {
 type ReminderSummary = {
   reminderDate: string;
   timeZone: string;
-  leadHours: number;
   tournamentsChecked: number;
   emailsSent: number;
   skippedAlreadySent: number;
   skippedNoMissingVotes: number;
   skippedOptedOut: number;
-  skippedTooEarly: number;
   failed: number;
 };
-
-function positiveNumberFromEnv(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
 
 function cronAuthorizationError(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -455,20 +447,16 @@ export async function GET(request: Request) {
   const supabase = createServiceSupabaseClient();
   const now = new Date();
   const timeZone = process.env.REMINDER_TIME_ZONE || DEFAULT_REMINDER_TIME_ZONE;
-  const leadHours = positiveNumberFromEnv(process.env.REMINDER_LEAD_HOURS, DEFAULT_REMINDER_LEAD_HOURS);
-  const leadMs = leadHours * 60 * 60 * 1000;
   const { reminderDate, start, end } = localDayWindow(now, timeZone);
   const dashboardUrl = appBaseUrl(request);
   const summary: ReminderSummary = {
     reminderDate,
     timeZone,
-    leadHours,
     tournamentsChecked: 0,
     emailsSent: 0,
     skippedAlreadySent: 0,
     skippedNoMissingVotes: 0,
     skippedOptedOut: 0,
-    skippedTooEarly: 0,
     failed: 0,
   };
 
@@ -507,14 +495,7 @@ export async function GET(request: Request) {
   for (const tournament of activeTournaments) {
     summary.tournamentsChecked += 1;
     const tournamentOpenPolls = todaysOpenPolls.filter((poll) => poll.tournament_id === tournament.id);
-    const firstPoll = tournamentOpenPolls[0];
-    if (!firstPoll) continue;
-
-    const firstReminderTime = new Date(new Date(firstPoll.locks_at).getTime() - leadMs);
-    if (now.getTime() < firstReminderTime.getTime()) {
-      summary.skippedTooEarly += 1;
-      continue;
-    }
+    if (tournamentOpenPolls.length === 0) continue;
 
     try {
       const context = await loadTournamentReminderContext(supabase, tournament.id);
