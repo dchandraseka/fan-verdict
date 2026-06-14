@@ -15,6 +15,7 @@ import {
   Shield,
   Trophy,
   UserCheck,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import { ensureProfile } from '@/lib/account';
@@ -481,6 +482,11 @@ export default function Dashboard() {
     document.getElementById('private-leagues')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const handleScrollToInviteFriends = () => {
+    const target = document.getElementById('invite-friends') ?? document.getElementById('private-leagues');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const toggleVoteDetails = (pollId: string) => {
     setExpandedVotePollIds((current) => {
       const next = new Set(current);
@@ -895,6 +901,16 @@ export default function Dashboard() {
                   >
                     <p className="text-xs font-semibold uppercase text-slate-500">Settled Polls</p>
                     <p className="mt-1 text-2xl font-bold">{settledPolls.length}</p>
+                  </button>
+                  <button
+                    onClick={handleScrollToInviteFriends}
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-2"
+                  >
+                    <p className="flex items-center gap-1 text-xs font-semibold uppercase text-slate-500">
+                      <UserPlus size={14} />
+                      Invite Friends
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-700">Send invite</p>
                   </button>
                 </div>
               </div>

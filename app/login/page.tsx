@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Trophy } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
@@ -10,9 +10,15 @@ import type { NotificationChannel } from '@/lib/types';
 
 type AuthMode = 'sign-in' | 'sign-up' | 'forgot-password';
 
+function safeRedirectTarget(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
+  return value;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('sign-in');
+  const [redirectTarget, setRedirectTarget] = useState('/');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +32,15 @@ export default function LoginPage() {
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
   const canSubmit =
     !busy && emailLooksValid && (mode === 'forgot-password' || (password.length >= 6 && (mode === 'sign-in' || phoneValidation.ok)));
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    setRedirectTarget(safeRedirectTarget(searchParams.get('redirect')));
+
+    if (searchParams.get('mode') === 'sign-up') {
+      setMode('sign-up');
+    }
+  }, []);
 
   const handleEmailAuth = async () => {
     if (!emailLooksValid) {
@@ -73,7 +88,7 @@ export default function LoginPage() {
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/login`,
+            emailRedirectTo: `${window.location.origin}/login?redirect=${encodeURIComponent(redirectTarget)}`,
             data: {
               display_name: displayName.trim() || email.split('@')[0],
               whatsapp_number: phoneValidation.value,
@@ -85,11 +100,11 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.session) {
-          router.push('/');
+          router.push(redirectTarget);
           return;
         }
 
-        setMessage('Account created. Check your email if confirmation is enabled in Supabase.');
+        setMessage('Account created. Check your email if confirmation is enabled in Supabase, then sign in to finish.');
         return;
       }
 
@@ -99,7 +114,7 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      router.push('/');
+      router.push(redirectTarget);
     } catch (error) {
       setMessage(getErrorMessage(error, 'Authentication failed.'));
     } finally {

@@ -9,6 +9,7 @@ export type PrivateLeagueStatus = 'active' | 'archived';
 export type PrivateLeagueRole = 'owner' | 'admin' | 'member';
 export type PrivateLeagueMemberStatus = 'invited' | 'active' | 'removed' | 'declined';
 export type PrivateLeagueJoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type PrivateLeagueEmailInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 export type HistoricalEventType = 'game' | 'playoff' | 'bonus';
 export type HistoricalClaimStatus = 'unclaimed' | 'claimed' | 'blocked';
 export type HistoricalClaimRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -146,6 +147,21 @@ export type PrivateLeagueJoinRequest = {
   review_note: string | null;
   reviewed_by_profile_id: string | null;
   reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrivateLeagueEmailInvite = {
+  id: string;
+  league_id: string;
+  tournament_id: string;
+  invited_email: string;
+  token_hash: string;
+  status: PrivateLeagueEmailInviteStatus;
+  invited_by: string | null;
+  accepted_by: string | null;
+  accepted_at: string | null;
+  expires_at: string;
   created_at: string;
   updated_at: string;
 };

@@ -7,6 +7,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Mail,
   Plus,
   Send,
   Share2,
@@ -73,6 +74,7 @@ export default function PrivateLeaguesPanel({
   const [leagueDescription, setLeagueDescription] = useState('');
   const [leagueVisibility, setLeagueVisibility] = useState<PrivateLeagueVisibility>('discoverable');
   const [inviteProfileId, setInviteProfileId] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [message, setMessage] = useState('');
   const [busyKey, setBusyKey] = useState('');
 
@@ -143,6 +145,8 @@ export default function PrivateLeaguesPanel({
   const selectedIsActiveOrInvitedMember = Boolean(
     selectedMyMembership && ['active', 'invited'].includes(selectedMyMembership.status),
   );
+  const inviteEmailValue = inviteEmail.trim().toLowerCase();
+  const inviteEmailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmailValue);
 
   const canRequestSelectedLeague =
     Boolean(selectedLeague?.visibility === 'discoverable') &&
@@ -226,6 +230,7 @@ export default function PrivateLeaguesPanel({
     setMessage('');
     setSelectedLeagueId('');
     setInviteProfileId('');
+    setInviteEmail('');
     loadPrivateLeagues();
   }, [loadPrivateLeagues]);
 
@@ -296,6 +301,40 @@ export default function PrivateLeaguesPanel({
       setInviteProfileId('');
       await loadPrivateLeagues();
       setMessage(`Invite sent to ${invitedName}.`);
+    });
+  };
+
+  const handleInviteFriendByEmail = async () => {
+    if (!selectedLeague) return;
+
+    if (!inviteEmailLooksValid) {
+      setMessage('Enter a valid friend email address.');
+      return;
+    }
+
+    await runAction(`invite-email-${selectedLeague.id}`, async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error('Sign in before inviting friends by email.');
+
+      const response = await fetch('/api/private-league-email-invites', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          leagueId: selectedLeague.id,
+          email: inviteEmailValue,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to send private league invite email.');
+      }
+
+      setInviteEmail('');
+      setMessage(`Invite email sent to ${inviteEmailValue}.`);
     });
   };
 
@@ -781,6 +820,33 @@ export default function PrivateLeaguesPanel({
 
                   {canManageSelectedLeague ? (
                     <div className="grid gap-4 p-4">
+                      <div id="invite-friends" className="scroll-mt-6">
+                        <p className="flex items-center gap-2 text-sm font-bold">
+                          <Mail size={15} />
+                          Invite friend by email
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          New friends will create or sign in to FanVerdict and then join this tournament and private league automatically.
+                        </p>
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            type="email"
+                            value={inviteEmail}
+                            onChange={(event) => setInviteEmail(event.target.value)}
+                            className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500"
+                            placeholder="friend@example.com"
+                          />
+                          <button
+                            disabled={!inviteEmailLooksValid || busyKey === `invite-email-${selectedLeague.id}`}
+                            onClick={handleInviteFriendByEmail}
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <Send size={15} />
+                            Send invite
+                          </button>
+                        </div>
+                      </div>
+
                       <div>
                         <p className="text-sm font-bold">Invite existing tournament participant</p>
                         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
