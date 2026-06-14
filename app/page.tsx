@@ -460,6 +460,10 @@ export default function Dashboard() {
     });
   };
 
+  const handleScrollToStandings = () => {
+    document.getElementById('live-standings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const toggleVoteDetails = (pollId: string) => {
     setExpandedVotePollIds((current) => {
       const next = new Set(current);
@@ -844,8 +848,15 @@ export default function Dashboard() {
                     <p className="mt-1 text-2xl font-bold">{activeMembers.length}</p>
                   </button>
                   <button
+                    onClick={handleScrollToStandings}
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-2"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Standings</p>
+                    <p className="mt-1 text-2xl font-bold">{standings.length}</p>
+                  </button>
+                  <button
                     onClick={() => handleLiveDashboardSection('openPolls')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-1 ${
                       liveDashboardSection === 'openPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
                     }`}
                   >
@@ -854,7 +865,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={() => handleLiveDashboardSection('settledPolls')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-1 ${
                       liveDashboardSection === 'settledPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
                     }`}
                   >
@@ -1097,7 +1108,7 @@ export default function Dashboard() {
               )}
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="live-standings" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
                   <BarChart3 size={18} />
