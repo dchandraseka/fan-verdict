@@ -21,6 +21,7 @@ import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortPollsByGameOrder, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import PrivateLeaguesPanel from './private-leagues-panel';
 import type {
   HistoricalEventSummary,
   HistoricalStanding,
@@ -232,7 +233,19 @@ export default function Dashboard() {
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
           );
 
-          const defaultOption = options[0];
+          const requestedTournamentId =
+            typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tournament') : null;
+          const requestedLiveTournament = requestedTournamentId
+            ? loadedTournaments.find((tournament) => tournament.id === requestedTournamentId)
+            : null;
+          const defaultOption = requestedLiveTournament
+            ? {
+                key: `live:${requestedLiveTournament.id}`,
+                kind: 'live' as const,
+                id: requestedLiveTournament.id,
+              }
+            : options[0];
+
           if (defaultOption?.kind === 'historical') {
             setSelectedTournamentKey(defaultOption.key);
             setSelectedHistoricalTournamentId(defaultOption.id);
@@ -462,6 +475,10 @@ export default function Dashboard() {
 
   const handleScrollToStandings = () => {
     document.getElementById('live-standings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleScrollToPrivateLeagues = () => {
+    document.getElementById('private-leagues')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const toggleVoteDetails = (pollId: string) => {
@@ -864,6 +881,13 @@ export default function Dashboard() {
                     <p className="mt-1 text-2xl font-bold">{openPolls.length}</p>
                   </button>
                   <button
+                    onClick={handleScrollToPrivateLeagues}
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-2"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Private Leagues</p>
+                    <p className="mt-1 text-sm font-bold text-slate-700">Manage</p>
+                  </button>
+                  <button
                     onClick={() => handleLiveDashboardSection('settledPolls')}
                     className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-1 ${
                       liveDashboardSection === 'settledPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
@@ -907,6 +931,18 @@ export default function Dashboard() {
                 </div>
               </div>
             </section>
+
+            {currentTournament && (
+              <PrivateLeaguesPanel
+                session={session}
+                tournament={currentTournament}
+                activeMembers={activeMembers}
+                profiles={profiles}
+                standings={standings}
+                canTournamentAdmin={canAdmin}
+                onTournamentRefresh={() => loadTournamentData(currentTournament.id)}
+              />
+            )}
 
             <section id="live-dashboard-detail" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">

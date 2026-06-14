@@ -2,6 +2,7 @@ import type {
   Poll,
   PollOption,
   PointsLedger,
+  PrivateLeagueMember,
   Profile,
   StandingRow,
   TournamentMember,
@@ -100,4 +101,18 @@ export function calculateStandings(
       };
     })
     .sort((a, b) => b.total_points - a.total_points || b.accuracy - a.accuracy || a.display_name.localeCompare(b.display_name));
+}
+
+export function calculatePrivateLeagueStandings(
+  standings: StandingRow[],
+  members: PrivateLeagueMember[],
+  leagueId: string,
+): StandingRow[] {
+  const activeMemberIds = new Set(
+    members
+      .filter((member) => member.league_id === leagueId && member.status === 'active')
+      .map((member) => member.profile_id),
+  );
+
+  return standings.filter((row) => activeMemberIds.has(row.user_id));
 }

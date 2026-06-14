@@ -4,6 +4,11 @@ export type TournamentStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type MatchStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
 export type PollStatus = 'draft' | 'open' | 'locked' | 'settled' | 'cancelled';
 export type LedgerReason = 'correct_pick' | 'manual_adjustment' | 'historical_import';
+export type PrivateLeagueVisibility = 'discoverable' | 'unlisted';
+export type PrivateLeagueStatus = 'active' | 'archived';
+export type PrivateLeagueRole = 'owner' | 'admin' | 'member';
+export type PrivateLeagueMemberStatus = 'invited' | 'active' | 'removed' | 'declined';
+export type PrivateLeagueJoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type HistoricalEventType = 'game' | 'playoff' | 'bonus';
 export type HistoricalClaimStatus = 'unclaimed' | 'claimed' | 'blocked';
 export type HistoricalClaimRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -104,6 +109,45 @@ export type PointsLedger = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+export type PrivateLeague = {
+  id: string;
+  tournament_id: string;
+  name: string;
+  description: string | null;
+  visibility: PrivateLeagueVisibility;
+  status: PrivateLeagueStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrivateLeagueMember = {
+  id: string;
+  league_id: string;
+  profile_id: string;
+  role: PrivateLeagueRole;
+  status: PrivateLeagueMemberStatus;
+  invited_by: string | null;
+  joined_at: string | null;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrivateLeagueJoinRequest = {
+  id: string;
+  league_id: string;
+  requester_profile_id: string;
+  status: PrivateLeagueJoinRequestStatus;
+  attempt_number: number;
+  request_note: string | null;
+  review_note: string | null;
+  reviewed_by_profile_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type StandingRow = {
