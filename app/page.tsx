@@ -584,6 +584,19 @@ export default function Dashboard() {
           </div>
         )}
 
+        {session && (
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start">
+            <Mail className="mt-0.5 shrink-0 text-amber-700" size={18} />
+            <div>
+              <p className="font-bold">Check your spam folder for FanVerdict emails</p>
+              <p className="mt-1">
+                Daily reminders are sent around 7:00 AM Eastern from funfanverdict@gmail.com. If a FanVerdict email
+                lands in Spam or Junk, mark it as not spam so future alerts reach your inbox.
+              </p>
+            </div>
+          </div>
+        )}
+
         {!session ? (
           <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-[1.4fr_1fr] md:items-center">
             <div>
