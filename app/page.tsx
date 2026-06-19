@@ -191,7 +191,8 @@ export default function Dashboard() {
     () => ({
       compared: resultComparisonRows.length,
       majorityPickedResult: resultComparisonRows.filter((row) => row.majorityPickedResult).length,
-      voteLeaderMatchedResult: resultComparisonRows.filter((row) => row.resultMatchedVoteLeader).length,
+      minorityPickedResult: resultComparisonRows.filter((row) => !row.majorityPickedResult && row.resultVoteCount > 0).length,
+      nobodyPickedResult: resultComparisonRows.filter((row) => row.resultVoteCount === 0).length,
     }),
     [resultComparisonRows],
   );
@@ -944,10 +945,16 @@ export default function Dashboard() {
                     }`}
                   >
                     <p className="text-xs font-semibold uppercase text-slate-500">Results vs Voting</p>
-                    <p className="mt-1 text-2xl font-bold">
-                      {resultComparisonSummary.majorityPickedResult}/{resultComparisonSummary.compared}
+                    <div className="mt-2 grid gap-1 text-sm font-bold text-slate-800">
+                      <p>Majority {resultComparisonSummary.majorityPickedResult} correct</p>
+                      <p>Minority {resultComparisonSummary.minorityPickedResult} correct</p>
+                      {resultComparisonSummary.nobodyPickedResult > 0 && (
+                        <p>Nobody {resultComparisonSummary.nobodyPickedResult} winners</p>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {resultComparisonSummary.compared} settled poll{resultComparisonSummary.compared === 1 ? '' : 's'}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">majority right</p>
                   </button>
                   <button
                     onClick={handleScrollToInviteFriends}
@@ -1019,15 +1026,15 @@ export default function Dashboard() {
                       <p className="mt-1 text-2xl font-bold">{resultComparisonSummary.compared}</p>
                     </div>
                     <div className="rounded-md border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-500">Majority Picked Result</p>
+                      <p className="text-xs font-semibold uppercase text-slate-500">Majority Picked Winner</p>
                       <p className="mt-1 text-2xl font-bold">
                         {resultComparisonSummary.majorityPickedResult}/{resultComparisonSummary.compared}
                       </p>
                     </div>
                     <div className="rounded-md border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-500">Vote Leader Matched</p>
+                      <p className="text-xs font-semibold uppercase text-slate-500">Minority Picked Winner</p>
                       <p className="mt-1 text-2xl font-bold">
-                        {resultComparisonSummary.voteLeaderMatchedResult}/{resultComparisonSummary.compared}
+                        {resultComparisonSummary.minorityPickedResult}/{resultComparisonSummary.compared}
                       </p>
                     </div>
                   </div>
@@ -1064,10 +1071,10 @@ export default function Dashboard() {
                               row.totalVotes === 0
                                 ? 'No votes'
                                 : row.majorityPickedResult
-                                  ? 'Majority picked result'
+                                  ? 'Majority picked winner'
                                   : row.resultVoteCount > 0
-                                    ? 'Minority picked result'
-                                    : 'Nobody picked result';
+                                    ? 'Minority picked winner'
+                                    : 'Nobody picked winner';
 
                             return (
                               <tr key={row.poll.id}>
