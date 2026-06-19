@@ -1071,10 +1071,10 @@ export default function Dashboard() {
                               row.totalVotes === 0
                                 ? 'No votes'
                                 : row.majorityPickedResult
-                                  ? 'Majority picked winner'
+                                  ? 'Majority correct'
                                   : row.resultVoteCount > 0
-                                    ? 'Minority picked winner'
-                                    : 'Nobody picked winner';
+                                    ? 'Minority correct'
+                                    : 'Nobody correct';
 
                             return (
                               <tr key={row.poll.id}>
