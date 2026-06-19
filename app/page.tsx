@@ -916,7 +916,7 @@ export default function Dashboard() {
                     onClick={handleScrollToStandings}
                     className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-1"
                   >
-                    <p className="text-xs font-semibold uppercase text-slate-500">Standings</p>
+                    <p className="text-xs font-semibold uppercase text-slate-500">Participant Standings</p>
                     <p className="mt-1 text-2xl font-bold">{standings.length}</p>
                   </button>
                   <button
@@ -1067,7 +1067,7 @@ export default function Dashboard() {
                                   ? 'Majority picked result'
                                   : row.resultVoteCount > 0
                                     ? 'Minority picked result'
-                                    : 'No result votes';
+                                    : 'Nobody picked result';
 
                             return (
                               <tr key={row.poll.id}>
@@ -1298,7 +1298,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
                   <BarChart3 size={18} />
-                  Standings
+                  Participant Standings
                 </h2>
               </div>
               <div className="overflow-x-auto">
