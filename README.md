@@ -22,8 +22,9 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 ## GitHub and Vercel Setup
 
 This project is intended to be pushed to GitHub and built by Vercel.
+1. G:\My Drive\fan-verdict is only google drive storage area. Any installations are done only in local machine
 
-1. Push the repository to GitHub.
+1. Changes are comitted to GitHub repository manually using VS Code by Dinesh and Vercel automatically take care of the build.
 
 2. In Vercel, add these environment variables to the project:
 

@@ -36,7 +36,7 @@ import type {
 } from '@/lib/types';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
-type LiveDashboardSection = 'participants' | 'openPolls' | 'settledPolls';
+type LiveDashboardSection = 'openPolls' | 'settledPolls' | 'resultComparison';
 
 export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -148,12 +148,63 @@ export default function Dashboard() {
     () => sortPollsByGameOrder(polls.filter((poll) => poll.status === 'settled'), 'desc'),
     [polls],
   );
+  const resultComparisonRows = useMemo(
+    () =>
+      settledPolls.map((poll) => {
+        const options = sortedPollOptions(poll);
+        const votesForPoll = (votesByPollId.get(poll.id) ?? []).filter((vote) => activeMemberIds.has(vote.user_id));
+        const totalVotes = votesForPoll.length;
+        const majorityThreshold = activeMembers.length ? Math.ceil(activeMembers.length / 2) : 0;
+        const optionCounts = options.map((option) => {
+          const voteCount = votesForPoll.filter((vote) => vote.selected_option_id === option.id).length;
+
+          return {
+            option,
+            voteCount,
+          };
+        });
+        const leadingVoteCount = optionCounts.reduce((max, item) => Math.max(max, item.voteCount), 0);
+        const leadingOptions = optionCounts.filter((item) => item.voteCount === leadingVoteCount && leadingVoteCount > 0);
+        const resultOption = options.find((option) => option.id === poll.result_option_id) ?? null;
+        const resultVoteCount = optionCounts.find((item) => item.option.id === poll.result_option_id)?.voteCount ?? 0;
+        const resultVotePercent = totalVotes ? Math.round((resultVoteCount / totalVotes) * 100) : 0;
+        const resultMatchedVoteLeader = Boolean(resultOption && leadingOptions.some((item) => item.option.id === resultOption.id));
+        const majorityPickedResult = majorityThreshold > 0 && resultVoteCount >= majorityThreshold;
+
+        return {
+          poll,
+          totalVotes,
+          missedVotes: Math.max(activeMembers.length - totalVotes, 0),
+          majorityThreshold,
+          resultLabel: resultOption?.label ?? 'Result not set',
+          resultVoteCount,
+          resultVotePercent,
+          leadingVoteCount,
+          leadingLabels: leadingOptions.map((item) => item.option.label),
+          resultMatchedVoteLeader,
+          majorityPickedResult,
+        };
+      }),
+    [activeMemberIds, activeMembers.length, settledPolls, votesByPollId],
+  );
+  const resultComparisonSummary = useMemo(
+    () => ({
+      compared: resultComparisonRows.length,
+      majorityPickedResult: resultComparisonRows.filter((row) => row.majorityPickedResult).length,
+      voteLeaderMatchedResult: resultComparisonRows.filter((row) => row.resultMatchedVoteLeader).length,
+    }),
+    [resultComparisonRows],
+  );
   const visibleLivePolls = liveDashboardSection === 'settledPolls' ? settledPolls : openPolls;
   const liveDetailHeading =
-    liveDashboardSection === 'participants' ? 'Participants' : liveDashboardSection === 'settledPolls' ? 'Settled Polls' : 'Open Polls';
+    liveDashboardSection === 'resultComparison'
+      ? 'Results vs Voting'
+      : liveDashboardSection === 'settledPolls'
+        ? 'Settled Polls'
+        : 'Open Polls';
   const liveDetailDescription =
-    liveDashboardSection === 'participants'
-      ? 'Active members who joined this tournament.'
+    liveDashboardSection === 'resultComparison'
+      ? 'Compares final results with vote leaders and group majority.'
       : liveDashboardSection === 'settledPolls'
         ? 'Completed poll results, newest game first.'
         : 'Available polls, sorted by game number ascending.';
@@ -862,17 +913,8 @@ export default function Dashboard() {
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <button
-                    onClick={() => handleLiveDashboardSection('participants')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
-                      liveDashboardSection === 'participants' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    <p className="text-xs font-semibold uppercase text-slate-500">Participants</p>
-                    <p className="mt-1 text-2xl font-bold">{activeMembers.length}</p>
-                  </button>
-                  <button
                     onClick={handleScrollToStandings}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-2"
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-1"
                   >
                     <p className="text-xs font-semibold uppercase text-slate-500">Standings</p>
                     <p className="mt-1 text-2xl font-bold">{standings.length}</p>
@@ -887,13 +929,6 @@ export default function Dashboard() {
                     <p className="mt-1 text-2xl font-bold">{openPolls.length}</p>
                   </button>
                   <button
-                    onClick={handleScrollToPrivateLeagues}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-2"
-                  >
-                    <p className="text-xs font-semibold uppercase text-slate-500">Private Leagues</p>
-                    <p className="mt-1 text-sm font-bold text-slate-700">Manage</p>
-                  </button>
-                  <button
                     onClick={() => handleLiveDashboardSection('settledPolls')}
                     className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-1 ${
                       liveDashboardSection === 'settledPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
@@ -903,14 +938,33 @@ export default function Dashboard() {
                     <p className="mt-1 text-2xl font-bold">{settledPolls.length}</p>
                   </button>
                   <button
+                    onClick={() => handleLiveDashboardSection('resultComparison')}
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-2 ${
+                      liveDashboardSection === 'resultComparison' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Results vs Voting</p>
+                    <p className="mt-1 text-2xl font-bold">
+                      {resultComparisonSummary.majorityPickedResult}/{resultComparisonSummary.compared}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">majority right</p>
+                  </button>
+                  <button
                     onClick={handleScrollToInviteFriends}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-2"
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-2"
                   >
                     <p className="flex items-center gap-1 text-xs font-semibold uppercase text-slate-500">
                       <UserPlus size={14} />
                       Invite Friends
                     </p>
                     <p className="mt-1 text-sm font-bold text-slate-700">Send invite</p>
+                  </button>
+                  <button
+                    onClick={handleScrollToPrivateLeagues}
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-2"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Private Leagues</p>
+                    <p className="mt-1 text-sm font-bold text-slate-700">Manage</p>
                   </button>
                 </div>
               </div>
@@ -948,55 +1002,123 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {currentTournament && (
-              <PrivateLeaguesPanel
-                session={session}
-                tournament={currentTournament}
-                activeMembers={activeMembers}
-                profiles={profiles}
-                standings={standings}
-                canTournamentAdmin={canAdmin}
-                onTournamentRefresh={() => loadTournamentData(currentTournament.id)}
-              />
-            )}
-
             <section id="live-dashboard-detail" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
-                  {liveDashboardSection === 'participants' ? <Users size={18} /> : <CalendarClock size={18} />}
+                  {liveDashboardSection === 'resultComparison' ? <CheckCircle2 size={18} /> : <CalendarClock size={18} />}
                   {liveDetailHeading}
                 </h2>
                 <span className="text-sm text-slate-500">{liveDetailDescription}</span>
               </div>
 
-              {liveDashboardSection === 'participants' ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-5 py-3">Participant</th>
-                        <th className="px-5 py-3">Role</th>
-                        <th className="px-5 py-3">Joined</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {activeMembers.length === 0 ? (
+              {liveDashboardSection === 'resultComparison' ? (
+                <div className="p-5">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-md border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Compared Polls</p>
+                      <p className="mt-1 text-2xl font-bold">{resultComparisonSummary.compared}</p>
+                    </div>
+                    <div className="rounded-md border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Majority Picked Result</p>
+                      <p className="mt-1 text-2xl font-bold">
+                        {resultComparisonSummary.majorityPickedResult}/{resultComparisonSummary.compared}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Vote Leader Matched</p>
+                      <p className="mt-1 text-2xl font-bold">
+                        {resultComparisonSummary.voteLeaderMatchedResult}/{resultComparisonSummary.compared}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full min-w-[940px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                         <tr>
-                          <td className="px-5 py-4 text-slate-500" colSpan={3}>
-                            No participants have joined this tournament yet.
-                          </td>
+                          <th className="px-5 py-3">Poll</th>
+                          <th className="px-5 py-3">Actual Result</th>
+                          <th className="px-5 py-3">Vote Leader</th>
+                          <th className="px-5 py-3">Result Votes</th>
+                          <th className="px-5 py-3">Group Read</th>
+                          <th className="px-5 py-3">Participation</th>
                         </tr>
-                      ) : (
-                        activeMembers.map((member) => (
-                          <tr key={member.id}>
-                            <td className="px-5 py-3 font-semibold">{profileById.get(member.user_id)?.display_name ?? 'Unknown player'}</td>
-                            <td className="px-5 py-3 capitalize text-slate-600">{member.role}</td>
-                            <td className="px-5 py-3">{formatDateTime(member.joined_at)}</td>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {resultComparisonRows.length === 0 ? (
+                          <tr>
+                            <td className="px-5 py-4 text-slate-500" colSpan={6}>
+                              No settled polls are available for comparison yet.
+                            </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          resultComparisonRows.map((row) => {
+                            const pollLabel = row.poll.matches?.game_number ? `Game ${row.poll.matches.game_number}` : 'Manual Poll';
+                            const leaderLabel =
+                              row.leadingLabels.length === 0
+                                ? 'No votes'
+                                : row.leadingLabels.length === 1
+                                  ? row.leadingLabels[0]
+                                  : `Tie: ${row.leadingLabels.join(', ')}`;
+                            const groupReadLabel =
+                              row.totalVotes === 0
+                                ? 'No votes'
+                                : row.majorityPickedResult
+                                  ? 'Majority picked result'
+                                  : row.resultVoteCount > 0
+                                    ? 'Minority picked result'
+                                    : 'No result votes';
+
+                            return (
+                              <tr key={row.poll.id}>
+                                <td className="px-5 py-3">
+                                  <p className="text-xs font-bold uppercase text-slate-500">{pollLabel}</p>
+                                  <p className="mt-1 font-semibold">{row.poll.question}</p>
+                                </td>
+                                <td className="px-5 py-3 font-semibold text-green-700">{row.resultLabel}</td>
+                                <td className="px-5 py-3">
+                                  <p className="font-semibold">{leaderLabel}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {row.leadingVoteCount} vote{row.leadingVoteCount === 1 ? '' : 's'}
+                                    {row.resultMatchedVoteLeader ? ' - matched result' : ''}
+                                  </p>
+                                </td>
+                                <td className="px-5 py-3">
+                                  <p className="font-semibold">
+                                    {row.resultVoteCount} of {activeMembers.length}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {row.resultVotePercent}% of votes cast. Threshold: {row.majorityThreshold || 'N/A'}
+                                  </p>
+                                </td>
+                                <td className="px-5 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase ${
+                                      row.majorityPickedResult
+                                        ? 'bg-green-100 text-green-700'
+                                        : row.resultVoteCount > 0
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : 'bg-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    {groupReadLabel}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3">
+                                  <p className="font-semibold">
+                                    {row.totalVotes} voted, {row.missedVotes} missed
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {activeMembers.length} active member{activeMembers.length === 1 ? '' : 's'}
+                                  </p>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div className="grid gap-4 p-5 lg:grid-cols-2">
@@ -1160,6 +1282,18 @@ export default function Dashboard() {
               )}
             </section>
 
+            {currentTournament && (
+              <PrivateLeaguesPanel
+                session={session}
+                tournament={currentTournament}
+                activeMembers={activeMembers}
+                profiles={profiles}
+                standings={standings}
+                canTournamentAdmin={canAdmin}
+                onTournamentRefresh={() => loadTournamentData(currentTournament.id)}
+              />
+            )}
+
             <section id="live-standings" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
@@ -1181,17 +1315,43 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {standings.map((row, index) => (
-                      <tr key={row.user_id}>
-                        <td className="px-5 py-3 font-bold">#{index + 1}</td>
-                        <td className="px-5 py-3 font-semibold">{row.display_name}</td>
-                        <td className="px-5 py-3 capitalize text-slate-600">{row.role}</td>
-                        <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
-                        <td className="px-5 py-3">{row.correct_picks}</td>
-                        <td className="px-5 py-3">{row.settled_votes}</td>
-                        <td className="px-5 py-3">{row.accuracy}%</td>
-                      </tr>
-                    ))}
+                    {standings.map((row, index) => {
+                      const isOwner = row.role === 'owner';
+
+                      return (
+                        <tr key={row.user_id} className={isOwner ? 'bg-amber-50/60' : undefined}>
+                          <td className="px-5 py-3 font-bold">#{index + 1}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold">{row.display_name}</span>
+                              {isOwner && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800">
+                                  <Shield size={12} />
+                                  Owner
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase ${
+                                isOwner
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : row.role === 'admin'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {isOwner ? 'Tournament owner' : row.role}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
+                          <td className="px-5 py-3">{row.correct_picks}</td>
+                          <td className="px-5 py-3">{row.settled_votes}</td>
+                          <td className="px-5 py-3">{row.accuracy}%</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
