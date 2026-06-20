@@ -1314,7 +1314,6 @@ export default function Dashboard() {
                     <tr>
                       <th className="px-5 py-3">Rank</th>
                       <th className="px-5 py-3">Participant</th>
-                      <th className="px-5 py-3">Role</th>
                       <th className="px-5 py-3">Points</th>
                       <th className="px-5 py-3">Correct</th>
                       <th className="px-5 py-3">Settled Votes</th>
@@ -1322,43 +1321,16 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {standings.map((row, index) => {
-                      const isOwner = row.role === 'owner';
-
-                      return (
-                        <tr key={row.user_id} className={isOwner ? 'bg-amber-50/60' : undefined}>
-                          <td className="px-5 py-3 font-bold">#{index + 1}</td>
-                          <td className="px-5 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold">{row.display_name}</span>
-                              {isOwner && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800">
-                                  <Shield size={12} />
-                                  Owner
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-5 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase ${
-                                isOwner
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : row.role === 'admin'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {isOwner ? 'Tournament owner' : row.role}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
-                          <td className="px-5 py-3">{row.correct_picks}</td>
-                          <td className="px-5 py-3">{row.settled_votes}</td>
-                          <td className="px-5 py-3">{row.accuracy}%</td>
-                        </tr>
-                      );
-                    })}
+                    {standings.map((row, index) => (
+                      <tr key={row.user_id}>
+                        <td className="px-5 py-3 font-bold">#{index + 1}</td>
+                        <td className="px-5 py-3 font-semibold">{row.display_name}</td>
+                        <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
+                        <td className="px-5 py-3">{row.correct_picks}</td>
+                        <td className="px-5 py-3">{row.settled_votes}</td>
+                        <td className="px-5 py-3">{row.accuracy}%</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
