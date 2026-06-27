@@ -629,6 +629,10 @@ export default function Dashboard() {
     document.getElementById('live-standings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const handleScrollToPlayerMatrix = () => {
+    document.getElementById('player-matrix')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handleScrollToPrivateLeagues = () => {
     document.getElementById('private-leagues')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -1011,17 +1015,25 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <button
                     onClick={handleScrollToStandings}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-1"
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
                   >
                     <p className="text-xs font-semibold uppercase text-slate-500">Player Standings</p>
                     <p className="mt-1 text-2xl font-bold">{standings.length}</p>
                   </button>
                   <button
+                    onClick={handleScrollToPlayerMatrix}
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Player Matrix</p>
+                    <p className="mt-1 text-2xl font-bold">{playerMatrix.columns.length}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">settled poll columns</p>
+                  </button>
+                  <button
                     onClick={() => handleLiveDashboardSection('openPolls')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-1 ${
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
                       liveDashboardSection === 'openPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
                     }`}
                   >
@@ -1030,7 +1042,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={() => handleLiveDashboardSection('settledPolls')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-1 ${
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
                       liveDashboardSection === 'settledPolls' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
                     }`}
                   >
@@ -1039,7 +1051,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={() => handleLiveDashboardSection('resultComparison')}
-                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-1 sm:row-start-2 ${
+                    className={`rounded-md border p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 ${
                       liveDashboardSection === 'resultComparison' ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'
                     }`}
                   >
@@ -1057,7 +1069,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={handleScrollToInviteFriends}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-2 sm:row-start-2"
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
                   >
                     <p className="flex items-center gap-1 text-xs font-semibold uppercase text-slate-500">
                       <UserPlus size={14} />
@@ -1067,7 +1079,7 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={handleScrollToPrivateLeagues}
-                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 sm:col-start-3 sm:row-start-2"
+                    className="rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
                   >
                     <p className="text-xs font-semibold uppercase text-slate-500">Private Leagues</p>
                     <p className="mt-1 text-sm font-bold text-slate-700">Manage</p>

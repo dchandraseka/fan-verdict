@@ -18,7 +18,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 ### Tournament Dashboard
 
 - Tournament picker for live tournaments and imported historical tournaments.
-- Live tournament dashboard with player standings, Player Matrix, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
+- Live tournament dashboard with main-menu shortcuts for player standings, Player Matrix, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
 - Player standings link each player to a separate point-detail page with per-game picks, results, points, and ledger entries, plus a back link to the same tournament standings.
 - Player Matrix view below player standings and above open polls showing each player's settled-poll points by game, tournament total, accuracy, winning-voter counts, and majority/minority result rows.
 - Historical tournament dashboard with historical standings, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
