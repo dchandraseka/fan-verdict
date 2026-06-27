@@ -978,8 +978,8 @@ export default function Dashboard() {
             </section>
           </div>
         ) : (
-          <div className="space-y-6">
-            <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+          <div className="flex flex-col gap-6">
+            <section className="order-1 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
               <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -1108,7 +1108,7 @@ export default function Dashboard() {
               </div>
             </section>
 
-            <section id="live-dashboard-detail" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="live-dashboard-detail" className="order-4 scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
                   {liveDashboardSection === 'resultComparison' ? <CheckCircle2 size={18} /> : <CalendarClock size={18} />}
@@ -1389,18 +1389,20 @@ export default function Dashboard() {
             </section>
 
             {currentTournament && (
-              <PrivateLeaguesPanel
-                session={session}
-                tournament={currentTournament}
-                activeMembers={activeMembers}
-                profiles={profiles}
-                standings={standings}
-                canTournamentAdmin={canAdmin}
-                onTournamentRefresh={() => loadTournamentData(currentTournament.id)}
-              />
+              <div className="order-5">
+                <PrivateLeaguesPanel
+                  session={session}
+                  tournament={currentTournament}
+                  activeMembers={activeMembers}
+                  profiles={profiles}
+                  standings={standings}
+                  canTournamentAdmin={canAdmin}
+                  onTournamentRefresh={() => loadTournamentData(currentTournament.id)}
+                />
+              </div>
             )}
 
-            <section id="live-standings" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="live-standings" className="order-2 scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
                   <BarChart3 size={18} />
@@ -1423,7 +1425,18 @@ export default function Dashboard() {
                     {standings.map((row, index) => (
                       <tr key={row.user_id}>
                         <td className="px-5 py-3 font-bold">#{index + 1}</td>
-                        <td className="px-5 py-3 font-semibold">{row.display_name}</td>
+                        <td className="px-5 py-3 font-semibold">
+                          {currentTournament ? (
+                            <a
+                              href={`/players/${row.user_id}?tournament=${currentTournament.id}`}
+                              className="text-blue-700 hover:text-blue-900 hover:underline"
+                            >
+                              {row.display_name}
+                            </a>
+                          ) : (
+                            row.display_name
+                          )}
+                        </td>
                         <td className="px-5 py-3 text-lg font-black text-blue-700">{row.total_points}</td>
                         <td className="px-5 py-3">{row.correct_picks}</td>
                         <td className="px-5 py-3">{row.settled_votes}</td>
@@ -1435,7 +1448,7 @@ export default function Dashboard() {
               </div>
             </section>
 
-            <section id="player-matrix" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="player-matrix" className="order-3 scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div>
                   <h2 className="flex items-center gap-2 font-bold">
@@ -1571,7 +1584,7 @@ export default function Dashboard() {
               )}
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section className="order-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 px-5 py-4">
                 <h2 className="font-bold">Vote Audit Log</h2>
                 <p className="mt-1 text-sm text-slate-500">Every visible vote includes the participant and latest vote time.</p>

@@ -18,8 +18,9 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 ### Tournament Dashboard
 
 - Tournament picker for live tournaments and imported historical tournaments.
-- Live tournament dashboard with player standings, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
-- Player Matrix view under player standings showing each player's settled-poll points by game, tournament total, accuracy, winning-voter counts, and majority/minority result rows.
+- Live tournament dashboard with player standings, Player Matrix, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
+- Player standings link each player to a separate point-detail page with per-game picks, results, points, and ledger entries, plus a back link to the same tournament standings.
+- Player Matrix view below player standings and above open polls showing each player's settled-poll points by game, tournament total, accuracy, winning-voter counts, and majority/minority result rows.
 - Historical tournament dashboard with historical standings, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
 - Browser share, WhatsApp, and email sharing links for the dashboard.
 - Members can join tournaments as participants.
@@ -76,7 +77,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 
 This project is intended to be pushed to GitHub and built by Vercel.
 
-1. The working copy currently lives at `G:\My Drive\fan-verdict`. Treat Google Drive as local storage only; deployment should come from GitHub, not from Drive sync.
+1. The working copy currently lives at `G:\My Drive\fan-verdict`. G drive is only for storage. Any install should be done only in local machine. Deployment should come from GitHub, not from Drive sync.
 2. Dinesh commits changes manually through VS Code/Git.
 3. Vercel builds automatically from the GitHub repository.
 4. Do not commit `.env.local`, API key files, recovery codes, or other local secrets.
