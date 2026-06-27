@@ -30,6 +30,7 @@ import type {
   PointsLedger,
   Poll,
   Profile,
+  StandingRow,
   Tournament,
   TournamentMember,
   Vote,
@@ -37,6 +38,31 @@ import type {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 type LiveDashboardSection = 'openPolls' | 'settledPolls' | 'resultComparison';
+type PlayerMatrixCellStatus = 'correct' | 'incorrect' | 'missed';
+
+type PlayerMatrixCell = {
+  pollId: string;
+  points: number;
+  status: PlayerMatrixCellStatus;
+  selectedLabel: string | null;
+  resultLabel: string;
+};
+
+type PlayerMatrixColumn = {
+  poll: Poll;
+  label: string;
+  title: string;
+  resultLabel: string;
+  winningVoters: number;
+  groupRead: 'Majority Win' | 'Minority Win' | 'No Winner';
+};
+
+type PlayerMatrixRow = StandingRow & {
+  cells: PlayerMatrixCell[];
+  matrixPoints: number;
+  adjustmentPoints: number;
+  missedPicks: number;
+};
 
 export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -196,6 +222,79 @@ export default function Dashboard() {
     }),
     [resultComparisonRows],
   );
+  const playerMatrix = useMemo(() => {
+    const matrixPolls = sortPollsByGameOrder(polls.filter((poll) => poll.status === 'settled' && Boolean(poll.result_option_id)));
+    const voteByPollAndUser = new Map<string, Vote>();
+    const pointsByPollAndUser = new Map<string, number>();
+
+    for (const vote of votes) {
+      if (!activeMemberIds.has(vote.user_id)) continue;
+      voteByPollAndUser.set(`${vote.poll_id}:${vote.user_id}`, vote);
+    }
+
+    for (const entry of ledger) {
+      if (!activeMemberIds.has(entry.user_id) || entry.reason !== 'correct_pick' || !entry.poll_id) continue;
+
+      const key = `${entry.poll_id}:${entry.user_id}`;
+      pointsByPollAndUser.set(key, (pointsByPollAndUser.get(key) ?? 0) + entry.delta);
+    }
+
+    const columns: PlayerMatrixColumn[] = matrixPolls.map((poll, index) => {
+      const votesForPoll = (votesByPollId.get(poll.id) ?? []).filter((vote) => activeMemberIds.has(vote.user_id));
+      const winningVoters = votesForPoll.filter((vote) => vote.selected_option_id === poll.result_option_id).length;
+      const majorityThreshold = activeMembers.length ? Math.ceil(activeMembers.length / 2) : 0;
+      const resultLabel = optionLabel(poll, poll.result_option_id);
+      const groupRead =
+        winningVoters === 0 ? 'No Winner' : majorityThreshold > 0 && winningVoters >= majorityThreshold ? 'Majority Win' : 'Minority Win';
+      const gameNumber = poll.matches?.game_number;
+
+      return {
+        poll,
+        label: gameNumber ? `G${gameNumber}` : `P${index + 1}`,
+        title: gameNumber ? `Game ${gameNumber}: ${poll.question}` : poll.question,
+        resultLabel,
+        winningVoters,
+        groupRead,
+      };
+    });
+
+    const rows: PlayerMatrixRow[] = standings.map((standing) => {
+      const cells = columns.map((column) => {
+        const key = `${column.poll.id}:${standing.user_id}`;
+        const vote = voteByPollAndUser.get(key);
+        const selectedLabel = vote ? optionLabel(column.poll, vote.selected_option_id) : null;
+        const points = pointsByPollAndUser.get(key) ?? 0;
+        const status: PlayerMatrixCellStatus = !vote
+          ? 'missed'
+          : vote.selected_option_id === column.poll.result_option_id
+            ? 'correct'
+            : 'incorrect';
+
+        return {
+          pollId: column.poll.id,
+          points,
+          status,
+          selectedLabel,
+          resultLabel: column.resultLabel,
+        };
+      });
+      const matrixPoints = cells.reduce((total, cell) => total + cell.points, 0);
+
+      return {
+        ...standing,
+        cells,
+        matrixPoints,
+        adjustmentPoints: standing.total_points - matrixPoints,
+        missedPicks: cells.filter((cell) => cell.status === 'missed').length,
+      };
+    });
+
+    return {
+      columns,
+      rows,
+      hasAdjustments: rows.some((row) => row.adjustmentPoints !== 0),
+    };
+  }, [activeMemberIds, activeMembers.length, ledger, polls, standings, votes, votesByPollId]);
   const visibleLivePolls = liveDashboardSection === 'settledPolls' ? settledPolls : openPolls;
   const liveDetailHeading =
     liveDashboardSection === 'resultComparison'
@@ -1334,6 +1433,142 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
+            </section>
+
+            <section id="player-matrix" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h2 className="flex items-center gap-2 font-bold">
+                    <BarChart3 size={18} />
+                    Player Matrix
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {playerMatrix.columns.length} settled poll{playerMatrix.columns.length === 1 ? '' : 's'} compared across{' '}
+                    {playerMatrix.rows.length} player{playerMatrix.rows.length === 1 ? '' : 's'}.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-green-800">Points won</span>
+                  <span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-800">Wrong pick</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">Missed</span>
+                </div>
+              </div>
+
+              {playerMatrix.columns.length === 0 ? (
+                <div className="px-5 py-5 text-sm text-slate-500">No settled polls are available for the player matrix yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="text-left text-sm"
+                    style={{ minWidth: `${Math.max(900, playerMatrix.columns.length * 72 + 520)}px` }}
+                  >
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="sticky left-0 z-20 min-w-[180px] bg-slate-50 px-5 py-3">Player</th>
+                        {playerMatrix.columns.map((column) => (
+                          <th key={column.poll.id} className="w-[72px] px-2 py-3 text-center" title={column.title}>
+                            <span className="block font-black text-slate-700">{column.label}</span>
+                            <span className="mt-1 block truncate text-[10px] normal-case text-slate-500">{column.resultLabel}</span>
+                          </th>
+                        ))}
+                        {playerMatrix.hasAdjustments && <th className="w-[88px] px-3 py-3 text-right">Adjust</th>}
+                        <th className="w-[88px] px-3 py-3 text-right">Total</th>
+                        <th className="w-[92px] px-3 py-3 text-right">Accuracy</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {playerMatrix.rows.map((row) => (
+                        <tr key={`matrix-${row.user_id}`}>
+                          <td className="sticky left-0 z-10 bg-white px-5 py-3">
+                            <p className="font-bold text-slate-900">{row.display_name}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              {row.correct_picks} correct, {row.missedPicks} missed
+                            </p>
+                          </td>
+                          {row.cells.map((cell, index) => {
+                            const column = playerMatrix.columns[index];
+                            const cellLabel = cell.status === 'missed' ? '-' : cell.points;
+                            const title =
+                              cell.status === 'missed'
+                                ? `${row.display_name} did not vote on ${column.title}. Result: ${cell.resultLabel}.`
+                                : `${row.display_name} picked ${cell.selectedLabel}. Result: ${cell.resultLabel}. Points: ${cell.points}.`;
+
+                            return (
+                              <td key={`${row.user_id}-${cell.pollId}`} className="px-2 py-2 text-center" title={title}>
+                                <span
+                                  className={`inline-flex h-8 w-10 items-center justify-center rounded-md text-xs font-black ${
+                                    cell.status === 'correct'
+                                      ? 'bg-green-100 text-green-800 ring-1 ring-green-200'
+                                      : cell.status === 'incorrect'
+                                        ? 'bg-rose-100 text-rose-800 ring-1 ring-rose-200'
+                                        : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200'
+                                  }`}
+                                >
+                                  {cellLabel}
+                                </span>
+                              </td>
+                            );
+                          })}
+                          {playerMatrix.hasAdjustments && (
+                            <td className="px-3 py-3 text-right font-semibold text-slate-700">
+                              {row.adjustmentPoints > 0 ? `+${row.adjustmentPoints}` : row.adjustmentPoints}
+                            </td>
+                          )}
+                          <td className="px-3 py-3 text-right text-lg font-black text-blue-700">{row.total_points}</td>
+                          <td className="px-3 py-3 text-right font-semibold">{row.accuracy}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                      <tr>
+                        <td className="sticky left-0 z-10 bg-slate-50 px-5 py-3 font-bold uppercase text-slate-500">Result</td>
+                        {playerMatrix.columns.map((column) => (
+                          <td key={`result-${column.poll.id}`} className="px-2 py-3 text-center" title={column.resultLabel}>
+                            <span className="block truncate text-slate-700">{column.resultLabel}</span>
+                          </td>
+                        ))}
+                        {playerMatrix.hasAdjustments && <td className="px-3 py-3" />}
+                        <td className="px-3 py-3" />
+                        <td className="px-3 py-3" />
+                      </tr>
+                      <tr>
+                        <td className="sticky left-0 z-10 bg-slate-50 px-5 py-3 font-bold uppercase text-slate-500">
+                          Winning voters
+                        </td>
+                        {playerMatrix.columns.map((column) => (
+                          <td key={`winning-voters-${column.poll.id}`} className="px-2 py-3 text-center">
+                            {column.winningVoters}
+                          </td>
+                        ))}
+                        {playerMatrix.hasAdjustments && <td className="px-3 py-3" />}
+                        <td className="px-3 py-3" />
+                        <td className="px-3 py-3" />
+                      </tr>
+                      <tr>
+                        <td className="sticky left-0 z-10 bg-slate-50 px-5 py-3 font-bold uppercase text-slate-500">Group read</td>
+                        {playerMatrix.columns.map((column) => (
+                          <td key={`group-read-${column.poll.id}`} className="px-2 py-3 text-center" title={column.groupRead}>
+                            <span
+                              className={`inline-flex min-w-10 justify-center rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                                column.groupRead === 'Majority Win'
+                                  ? 'bg-green-100 text-green-800'
+                                  : column.groupRead === 'Minority Win'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {column.groupRead === 'Majority Win' ? 'Maj' : column.groupRead === 'Minority Win' ? 'Min' : 'None'}
+                            </span>
+                          </td>
+                        ))}
+                        {playerMatrix.hasAdjustments && <td className="px-3 py-3" />}
+                        <td className="px-3 py-3" />
+                        <td className="px-3 py-3" />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
