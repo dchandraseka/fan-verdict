@@ -31,6 +31,7 @@ import type {
   Poll,
   Profile,
   StandingRow,
+  TournamentAnnouncement,
   Tournament,
   TournamentMember,
   Vote,
@@ -77,6 +78,7 @@ export default function Dashboard() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [ledger, setLedger] = useState<PointsLedger[]>([]);
+  const [announcements, setAnnouncements] = useState<TournamentAnnouncement[]>([]);
   const [historicalStandings, setHistoricalStandings] = useState<HistoricalStanding[]>([]);
   const [historicalEvents, setHistoricalEvents] = useState<HistoricalEventSummary[]>([]);
   const [isAppAdmin, setIsAppAdmin] = useState(false);
@@ -425,7 +427,7 @@ export default function Dashboard() {
     setMessage('');
 
     try {
-      const [membersResult, pollsResult, ledgerResult] = await Promise.all([
+      const [membersResult, pollsResult, ledgerResult, announcementsResult] = await Promise.all([
         supabase.from('tournament_members').select('*').eq('tournament_id', tournamentId),
         supabase
           .from('polls')
@@ -433,15 +435,23 @@ export default function Dashboard() {
           .eq('tournament_id', tournamentId)
           .order('locks_at', { ascending: true }),
         supabase.from('points_ledger').select('*').eq('tournament_id', tournamentId),
+        supabase
+          .from('tournament_announcements')
+          .select('*')
+          .eq('tournament_id', tournamentId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false }),
       ]);
 
       if (membersResult.error) throw membersResult.error;
       if (pollsResult.error) throw pollsResult.error;
       if (ledgerResult.error) throw ledgerResult.error;
+      if (announcementsResult.error) throw announcementsResult.error;
 
       const loadedMembers = (membersResult.data ?? []) as TournamentMember[];
       const loadedPolls = sortPollsByGameOrder((pollsResult.data ?? []) as Poll[]);
       const loadedLedger = (ledgerResult.data ?? []) as PointsLedger[];
+      const loadedAnnouncements = (announcementsResult.data ?? []) as TournamentAnnouncement[];
       const userIds = Array.from(new Set(loadedMembers.map((member) => member.user_id)));
       const pollIds = loadedPolls.map((poll) => poll.id);
 
@@ -463,6 +473,7 @@ export default function Dashboard() {
       setMembers(loadedMembers);
       setPolls(loadedPolls);
       setLedger(loadedLedger);
+      setAnnouncements(loadedAnnouncements);
       setProfiles(loadedProfiles);
       setVotes(loadedVotes);
       setLoadState('ready');
@@ -485,6 +496,7 @@ export default function Dashboard() {
       setPolls([]);
       setVotes([]);
       setLedger([]);
+      setAnnouncements([]);
       setHistoricalStandings([]);
       setHistoricalEvents([]);
       setIsAppAdmin(false);
@@ -527,6 +539,7 @@ export default function Dashboard() {
       setPolls([]);
       setVotes([]);
       setLedger([]);
+      setAnnouncements([]);
       setLoadState('ready');
     } catch (error) {
       setLoadState('error');
@@ -766,16 +779,20 @@ export default function Dashboard() {
           </div>
         )}
 
-        {session && (
-          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start">
-            <Mail className="mt-0.5 shrink-0 text-amber-700" size={18} />
-            <div>
-              <p className="font-bold">Check your spam folder for FanVerdict emails</p>
-              <p className="mt-1">
-                Daily reminders are sent around 7:00 AM Eastern from funfanverdict@gmail.com. If a FanVerdict email
-                lands in Spam or Junk, mark it as not spam so future alerts reach your inbox.
-              </p>
-            </div>
+        {session && announcements.length > 0 && (
+          <div className="mb-4 grid gap-3">
+            {announcements.map((announcement) => (
+              <div
+                key={announcement.id}
+                className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start"
+              >
+                <Mail className="mt-0.5 shrink-0 text-amber-700" size={18} />
+                <div>
+                  <p className="font-bold">{announcement.title}</p>
+                  <p className="mt-1 whitespace-pre-line">{announcement.body}</p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

@@ -10,6 +10,7 @@ export type PrivateLeagueRole = 'owner' | 'admin' | 'member';
 export type PrivateLeagueMemberStatus = 'invited' | 'active' | 'removed' | 'declined';
 export type PrivateLeagueJoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type PrivateLeagueEmailInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
+export type TournamentAnnouncementStatus = 'active' | 'removed';
 export type HistoricalEventType = 'game' | 'playoff' | 'bonus';
 export type HistoricalClaimStatus = 'unclaimed' | 'claimed' | 'blocked';
 export type HistoricalClaimRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -110,6 +111,19 @@ export type PointsLedger = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+export type TournamentAnnouncement = {
+  id: string;
+  tournament_id: string;
+  title: string;
+  body: string;
+  status: TournamentAnnouncementStatus;
+  created_by: string | null;
+  removed_by: string | null;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type PrivateLeague = {

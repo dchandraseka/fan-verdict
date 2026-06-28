@@ -10,6 +10,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 
 drop table if exists public.audit_log cascade;
 drop table if exists public.reminder_deliveries cascade;
+drop table if exists public.tournament_announcements cascade;
 drop table if exists public.points_ledger cascade;
 drop table if exists public.votes cascade;
 drop table if exists public.poll_options cascade;
@@ -161,6 +162,26 @@ create table public.reminder_deliveries (
   unique (tournament_id, profile_id, reminder_date, channel)
 );
 
+create table public.tournament_announcements (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments(id) on delete cascade,
+  title text not null check (char_length(trim(title)) between 1 and 120),
+  body text not null check (char_length(trim(body)) between 1 and 1200),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  created_by uuid references public.profiles(id) on delete set null,
+  removed_by uuid references public.profiles(id) on delete set null,
+  removed_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create unique index tournament_announcements_one_active_per_tournament
+on public.tournament_announcements (tournament_id)
+where status = 'active';
+
+create index tournament_announcements_tournament_created_idx
+on public.tournament_announcements (tournament_id, created_at desc);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -197,6 +218,10 @@ for each row execute function public.set_updated_at();
 
 create trigger reminder_deliveries_set_updated_at
 before update on public.reminder_deliveries
+for each row execute function public.set_updated_at();
+
+create trigger tournament_announcements_set_updated_at
+before update on public.tournament_announcements
 for each row execute function public.set_updated_at();
 
 create or replace function public.handle_new_user()
@@ -366,6 +391,7 @@ alter table public.votes enable row level security;
 alter table public.points_ledger enable row level security;
 alter table public.audit_log enable row level security;
 alter table public.reminder_deliveries enable row level security;
+alter table public.tournament_announcements enable row level security;
 
 create policy "Authenticated users can read profiles"
 on public.profiles for select
@@ -459,6 +485,25 @@ create policy "Owners can delete tournaments"
 on public.tournaments for delete
 to authenticated
 using (public.is_tournament_owner(id));
+
+create policy "Members can read tournament announcements"
+on public.tournament_announcements for select
+to authenticated
+using (public.is_tournament_member(tournament_id));
+
+create policy "Admins can create tournament announcements"
+on public.tournament_announcements for insert
+to authenticated
+with check (
+  created_by = auth.uid()
+  and public.is_tournament_admin(tournament_id)
+);
+
+create policy "Admins can update tournament announcements"
+on public.tournament_announcements for update
+to authenticated
+using (public.is_tournament_admin(tournament_id))
+with check (public.is_tournament_admin(tournament_id));
 
 create policy "Authenticated users can read members"
 on public.tournament_members for select

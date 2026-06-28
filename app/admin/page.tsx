@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   CheckCircle2,
   Crown,
+  Mail,
   Plus,
   RefreshCcw,
   Save,
@@ -19,7 +20,7 @@ import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { formatDateTime, isPollLocked, optionLabel, sortPollsByGameOrder, sortedPollOptions } from '@/lib/fanverdict';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import type { HistoricalClaimRequest, HistoricalParticipant, Poll, Profile, Tournament, TournamentMember } from '@/lib/types';
+import type { HistoricalClaimRequest, HistoricalParticipant, Poll, Profile, Tournament, TournamentAnnouncement, TournamentMember } from '@/lib/types';
 
 function defaultDateTimeLocal() {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -68,6 +69,10 @@ function reminderLabel(channel: string | null | undefined) {
   return 'Email only';
 }
 
+const ANNOUNCEMENT_TEMPLATE_TITLE = 'Check your spam folder for FanVerdict emails';
+const ANNOUNCEMENT_TEMPLATE_BODY =
+  'Daily reminders are sent around 7:00 AM Eastern from funfanverdict@gmail.com. If a FanVerdict email lands in Spam or Junk, mark it as not spam so future alerts reach your inbox.';
+
 export default function AdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -76,6 +81,7 @@ export default function AdminPortal() {
   const [members, setMembers] = useState<TournamentMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+  const [announcements, setAnnouncements] = useState<TournamentAnnouncement[]>([]);
   const [isAppAdmin, setIsAppAdmin] = useState(false);
   const [claimRequests, setClaimRequests] = useState<HistoricalClaimRequest[]>([]);
   const [claimParticipants, setClaimParticipants] = useState<HistoricalParticipant[]>([]);
@@ -113,6 +119,9 @@ export default function AdminPortal() {
   const [adjustmentNote, setAdjustmentNote] = useState('');
 
   const [promoteUserId, setPromoteUserId] = useState('');
+
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementBody, setAnnouncementBody] = useState('');
 
   const currentTournament = useMemo(
     () => tournaments.find((tournament) => tournament.id === selectedTournamentId) ?? null,
@@ -158,6 +167,10 @@ export default function AdminPortal() {
   const editablePolls = useMemo(
     () => polls.filter((poll) => poll.status === 'open' && !isPollLocked(poll)),
     [polls],
+  );
+  const activeAnnouncement = useMemo(
+    () => announcements.find((announcement) => announcement.status === 'active') ?? null,
+    [announcements],
   );
   const selectedEditPoll = useMemo(
     () => editablePolls.find((poll) => poll.id === editPollId) ?? null,
@@ -238,17 +251,23 @@ export default function AdminPortal() {
     if (!tournamentId) return;
 
     try {
-      const [membersResult, pollsResult] = await Promise.all([
+      const [membersResult, pollsResult, announcementsResult] = await Promise.all([
         supabase.from('tournament_members').select('*').eq('tournament_id', tournamentId).order('joined_at'),
         supabase
           .from('polls')
           .select('*, matches(*), poll_options(*)')
           .eq('tournament_id', tournamentId)
           .order('locks_at', { ascending: false }),
+        supabase
+          .from('tournament_announcements')
+          .select('*')
+          .eq('tournament_id', tournamentId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (membersResult.error) throw membersResult.error;
       if (pollsResult.error) throw pollsResult.error;
+      if (announcementsResult.error) throw announcementsResult.error;
 
       const loadedMembers = (membersResult.data ?? []) as TournamentMember[];
       const userIds = Array.from(new Set(loadedMembers.map((member) => member.user_id)));
@@ -261,6 +280,7 @@ export default function AdminPortal() {
       setMembers(loadedMembers);
       setProfiles((profilesResult.data ?? []) as Profile[]);
       setPolls(sortPollsByGameOrder((pollsResult.data ?? []) as Poll[]));
+      setAnnouncements((announcementsResult.data ?? []) as TournamentAnnouncement[]);
     } catch (error) {
       setMessage(getErrorMessage(error, 'Unable to load tournament details.'));
     }
@@ -657,6 +677,86 @@ export default function AdminPortal() {
       setMessage('Participant promoted to co-admin.');
     });
 
+  const handleUseAnnouncementTemplate = () => {
+    setAnnouncementTitle(ANNOUNCEMENT_TEMPLATE_TITLE);
+    setAnnouncementBody(ANNOUNCEMENT_TEMPLATE_BODY);
+  };
+
+  const handleCreateAnnouncement = () =>
+    runAdminAction(async () => {
+      if (!session || !currentTournament) throw new Error('Select a tournament first.');
+      if (!canAdmin) throw new Error('Only tournament admins can post dashboard messages.');
+      if (activeAnnouncement) throw new Error('Remove the active dashboard message before posting another one.');
+
+      const title = announcementTitle.trim();
+      const body = announcementBody.trim();
+      if (!title || !body) throw new Error('Message title and content are required.');
+      if (title.length > 120) throw new Error('Message title must be 120 characters or fewer.');
+      if (body.length > 1200) throw new Error('Message content must be 1200 characters or fewer.');
+
+      const { data, error } = await supabase
+        .from('tournament_announcements')
+        .insert({
+          tournament_id: currentTournament.id,
+          title,
+          body,
+          status: 'active',
+          created_by: session.user.id,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      await supabase.from('audit_log').insert({
+        tournament_id: currentTournament.id,
+        actor_id: session.user.id,
+        action: 'tournament_announcement_created',
+        details: {
+          announcement_id: (data as TournamentAnnouncement).id,
+          title,
+        },
+      });
+
+      setAnnouncementTitle('');
+      setAnnouncementBody('');
+      await loadTournamentData(currentTournament.id);
+      setMessage('Dashboard message posted.');
+    });
+
+  const handleRemoveAnnouncement = (announcement: TournamentAnnouncement) =>
+    runAdminAction(async () => {
+      if (!session || !currentTournament) throw new Error('Select a tournament first.');
+      if (!canAdmin) throw new Error('Only tournament admins can remove dashboard messages.');
+
+      const removedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('tournament_announcements')
+        .update({
+          status: 'removed',
+          removed_by: session.user.id,
+          removed_at: removedAt,
+        })
+        .eq('id', announcement.id)
+        .eq('tournament_id', currentTournament.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      await supabase.from('audit_log').insert({
+        tournament_id: currentTournament.id,
+        actor_id: session.user.id,
+        action: 'tournament_announcement_removed',
+        details: {
+          announcement_id: announcement.id,
+          title: announcement.title,
+        },
+      });
+
+      await loadTournamentData(currentTournament.id);
+      setMessage('Dashboard message removed.');
+    });
+
   const handleReviewClaimRequest = (requestId: string, approve: boolean) =>
     runAdminAction(async () => {
       if (!isAppAdmin) throw new Error('Only app admins can review historical profile claims.');
@@ -892,6 +992,143 @@ export default function AdminPortal() {
           </section>
         ) : currentTournament ? (
           <div className="grid gap-6 lg:grid-cols-2">
+            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 font-bold">
+                    <Mail size={18} />
+                    Dashboard Message
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Post one tournament message at the top of the main dashboard. It stays visible until an admin removes it.
+                  </p>
+                </div>
+                <button
+                  disabled={Boolean(activeAnnouncement)}
+                  onClick={handleUseAnnouncementTemplate}
+                  className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Mail size={16} />
+                  Use email reminder template
+                </button>
+              </div>
+
+              {activeAnnouncement && (
+                <div className="mt-4">
+                  <p className="text-xs font-bold uppercase text-slate-500">Currently live</p>
+                  <div className="mt-2 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start">
+                    <Mail className="mt-0.5 shrink-0 text-amber-700" size={18} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold">{activeAnnouncement.title}</p>
+                      <p className="mt-1 whitespace-pre-line">{activeAnnouncement.body}</p>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={() => handleRemoveAnnouncement(activeAnnouncement)}
+                      className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-amber-300 px-3 text-xs font-bold text-amber-950 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 grid gap-3">
+                {activeAnnouncement && (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    Remove the live message before posting another dashboard message.
+                  </p>
+                )}
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Header</span>
+                  <input
+                    value={announcementTitle}
+                    onChange={(event) => setAnnouncementTitle(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500 disabled:bg-slate-50"
+                    maxLength={120}
+                    disabled={Boolean(activeAnnouncement)}
+                    placeholder="Message header"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Content</span>
+                  <textarea
+                    value={announcementBody}
+                    onChange={(event) => setAnnouncementBody(event.target.value)}
+                    className="mt-1 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-blue-500 disabled:bg-slate-50"
+                    maxLength={1200}
+                    disabled={Boolean(activeAnnouncement)}
+                    placeholder="Write the message players should see on the dashboard."
+                  />
+                </label>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    {announcementTitle.trim().length}/120 header, {announcementBody.trim().length}/1200 content
+                  </p>
+                  <button
+                    disabled={busy || Boolean(activeAnnouncement)}
+                    onClick={handleCreateAnnouncement}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={16} />
+                    Post dashboard message
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 border-t border-slate-200 pt-5">
+                <h3 className="font-bold">Message History</h3>
+                {announcements.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">No dashboard messages have been posted for this tournament.</p>
+                ) : (
+                  <div className="mt-3 grid gap-3">
+                    {announcements.map((announcement) => {
+                      const createdBy = announcement.created_by ? profileById.get(announcement.created_by) : null;
+                      const removedBy = announcement.removed_by ? profileById.get(announcement.removed_by) : null;
+
+                      return (
+                        <article key={announcement.id} className="rounded-lg border border-slate-200 p-4 text-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-bold text-slate-950">{announcement.title}</p>
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-xs font-black uppercase ${
+                                    announcement.status === 'active'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {announcement.status}
+                                </span>
+                              </div>
+                              <p className="mt-1 whitespace-pre-line text-slate-700">{announcement.body}</p>
+                              <p className="mt-2 text-xs font-semibold text-slate-500">
+                                Posted {formatDateTime(announcement.created_at)}
+                                {createdBy ? ` by ${createdBy.display_name}` : ''}
+                                {announcement.removed_at
+                                  ? ` - removed ${formatDateTime(announcement.removed_at)}${removedBy ? ` by ${removedBy.display_name}` : ''}`
+                                  : ''}
+                              </p>
+                            </div>
+                            {announcement.status === 'active' && (
+                              <button
+                                disabled={busy}
+                                onClick={() => handleRemoveAnnouncement(announcement)}
+                                className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+
             <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="flex items-center gap-2 font-bold">
                 <Settings size={18} />

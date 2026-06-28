@@ -1,6 +1,6 @@
 # FanVerdict
 
-Last source review: June 27, 2026
+Last source review: June 28, 2026
 
 FanVerdict is a tournament prediction app for running match polls, locking votes at game time, calculating points, managing private groups, and sharing live or historical standings.
 
@@ -19,6 +19,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 
 - Tournament picker for live tournaments and imported historical tournaments.
 - Live tournament dashboard with main-menu shortcuts for player standings, Player Matrix, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
+- Tournament admins can publish one active dashboard message at a time. Messages use the existing mail-icon notice format and remain visible until removed.
 - Player standings link each player to a separate point-detail page with per-game picks, results, points, and ledger entries, plus a back link to the same tournament standings.
 - Player Matrix view below player standings and above open polls showing each player's settled-poll points by game, tournament total, accuracy, winning-voter counts, and majority/minority result rows.
 - Historical tournament dashboard with historical standings, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
@@ -44,6 +45,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Admin result settlement with configurable points per correct vote.
 - Manual point adjustments through `points_ledger`.
 - Co-admin promotion for active tournament participants.
+- Dashboard message composer with a reusable email-reminder template, active-message removal, and previous-message history.
 - Historical profile claim review for app admins.
 - Vote/result actions are recorded in `audit_log`.
 
@@ -152,6 +154,7 @@ REMINDER_TIME_ZONE=America/New_York
 - `supabase/migrate-historical-claim-requests.sql`
 - `supabase/migrate-private-leagues.sql`
 - `supabase/migrate-private-league-email-invites.sql`
+- `supabase/migrate-tournament-announcements.sql`
 
 5. Optional data load/helper scripts:
 
@@ -182,6 +185,7 @@ Core application tables:
 - `points_ledger`
 - `audit_log`
 - `reminder_deliveries`
+- `tournament_announcements`
 
 Private league tables:
 
