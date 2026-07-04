@@ -1,6 +1,6 @@
 # FIFA 2026 Knockout Upload Status
 
-Last checked: 2026-07-03
+Last checked: 2026-07-04
 
 Official source:
 https://api.fifa.com/api/v3/calendar/matches?language=en&count=200&idCompetition=17&idSeason=285023
@@ -17,31 +17,25 @@ This matters in Round of 16 because FIFA Match 90 kicks off before FIFA Match 89
 - FanVerdict Game 89 = FIFA Match 90
 - FanVerdict Game 90 = FIFA Match 89
 
-## Completed / Ready To Load: Round Of 16 Confirmed
+## Completed: Round Of 16 Loaded
 
-SQL prepared:
+SQL files:
 `supabase/create-fifa-2026-round-of-16-confirmed.sql`
+`supabase/create-fifa-2026-round-of-16-remaining.sql`
 
 Status:
-`SQL prepared / pending Supabase run`
+`Loaded in Supabase on 2026-07-04`
 
 | FanVerdict Game | FIFA Match | Fixture | Kickoff UTC | Kickoff Eastern | Venue | Upload Status |
 |---:|---:|---|---|---|---|---|
-| 89 | 90 | Canada vs Morocco | 2026-07-04 17:00:00+00 | Sat Jul 4, 1:00 PM EDT | Houston Stadium, Houston | Ready to load |
-| 90 | 89 | Paraguay vs France | 2026-07-04 21:00:00+00 | Sat Jul 4, 5:00 PM EDT | Philadelphia Stadium, Philadelphia | Ready to load |
-| 91 | 91 | Brazil vs Norway | 2026-07-05 20:00:00+00 | Sun Jul 5, 4:00 PM EDT | New York/New Jersey Stadium, New Jersey | Ready to load |
-| 92 | 92 | Mexico vs England | 2026-07-06 00:00:00+00 | Sun Jul 5, 8:00 PM EDT | Mexico City Stadium, Mexico City | Ready to load |
-| 93 | 93 | Portugal vs Spain | 2026-07-06 19:00:00+00 | Mon Jul 6, 3:00 PM EDT | Dallas Stadium, Dallas | Ready to load |
-| 94 | 94 | USA vs Belgium | 2026-07-07 00:00:00+00 | Mon Jul 6, 8:00 PM EDT | Seattle Stadium, Seattle | Ready to load |
-
-## Due: Round Of 16 Not Yet Confirmed
-
-These should not be loaded until FIFA populates both teams.
-
-| FanVerdict Game | FIFA Match | FIFA Placeholder | Kickoff UTC | Kickoff Eastern | Venue | Due Reason |
-|---:|---:|---|---|---|---|---|
-| 95 | 95 | W86 vs W88 | 2026-07-07 16:00:00+00 | Tue Jul 7, 12:00 PM EDT | Atlanta Stadium, Atlanta | Both teams pending |
-| 96 | 96 | W85 vs W87 | 2026-07-07 20:00:00+00 | Tue Jul 7, 4:00 PM EDT | BC Place Vancouver, Vancouver | One team pending |
+| 89 | 90 | Canada vs Morocco | 2026-07-04 17:00:00+00 | Sat Jul 4, 1:00 PM EDT | Houston Stadium, Houston | Loaded |
+| 90 | 89 | Paraguay vs France | 2026-07-04 21:00:00+00 | Sat Jul 4, 5:00 PM EDT | Philadelphia Stadium, Philadelphia | Loaded |
+| 91 | 91 | Brazil vs Norway | 2026-07-05 20:00:00+00 | Sun Jul 5, 4:00 PM EDT | New York/New Jersey Stadium, New Jersey | Loaded |
+| 92 | 92 | Mexico vs England | 2026-07-06 00:00:00+00 | Sun Jul 5, 8:00 PM EDT | Mexico City Stadium, Mexico City | Loaded |
+| 93 | 93 | Portugal vs Spain | 2026-07-06 19:00:00+00 | Mon Jul 6, 3:00 PM EDT | Dallas Stadium, Dallas | Loaded |
+| 94 | 94 | USA vs Belgium | 2026-07-07 00:00:00+00 | Mon Jul 6, 8:00 PM EDT | Seattle Stadium, Seattle | Loaded |
+| 95 | 95 | Argentina vs Egypt | 2026-07-07 16:00:00+00 | Tue Jul 7, 12:00 PM EDT | Atlanta Stadium, Atlanta | Loaded |
+| 96 | 96 | Switzerland vs Colombia | 2026-07-07 20:00:00+00 | Tue Jul 7, 4:00 PM EDT | BC Place Vancouver, Vancouver | Loaded |
 
 ## Due: Quarter-Finals Not Yet Confirmed
 
@@ -69,10 +63,7 @@ Use the same pattern as the Round of 32 scripts:
 
 ## Next Update
 
-After the SQL is run successfully, change the six Round of 16 rows above from `Ready to load` to `Loaded`, and record the load date.
-
-When FIFA confirms teams for Games 95-96, create:
-`supabase/create-fifa-2026-round-of-16-remaining.sql`
+Round of 16 loading is complete.
 
 When FIFA confirms teams for Games 97-100, create:
 `supabase/create-fifa-2026-quarter-finals-confirmed.sql`

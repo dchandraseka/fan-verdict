@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
+  BarChart3,
   Check,
   Download,
   Eye,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
 import { calculatePrivateLeagueStandings, formatDateTime } from '@/lib/fanverdict';
+import { createStandingsShareImage, downloadBlob, slugifyFileName } from '@/lib/standings-share-image';
 import { supabase } from '@/lib/supabase';
 import type {
   PrivateLeague,
@@ -56,6 +58,12 @@ function filenameSafe(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'private-league';
 }
 
+function getSelectedLeagueShareUrl(league: Pick<PrivateLeague, 'id' | 'tournament_id'>) {
+  if (typeof window === 'undefined') return '';
+
+  return `${window.location.origin}${window.location.pathname}?tournament=${league.tournament_id}&privateLeague=${league.id}#private-leagues`;
+}
+
 export default function PrivateLeaguesPanel({
   session,
   tournament,
@@ -77,6 +85,7 @@ export default function PrivateLeaguesPanel({
   const [inviteEmail, setInviteEmail] = useState('');
   const [message, setMessage] = useState('');
   const [busyKey, setBusyKey] = useState('');
+  const [isSharingStandingsImage, setIsSharingStandingsImage] = useState(false);
 
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const activeTournamentMemberIds = useMemo(() => new Set(activeMembers.map((member) => member.user_id)), [activeMembers]);
@@ -410,10 +419,7 @@ export default function PrivateLeaguesPanel({
     const lines = selectedStandings.map(
       (row, index) => `${index + 1}. ${row.display_name}: ${row.total_points} pts, ${row.accuracy}% accuracy`,
     );
-    const shareUrl =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}?tournament=${selectedLeague.tournament_id}&privateLeague=${selectedLeague.id}#private-leagues`
-        : '';
+    const shareUrl = getSelectedLeagueShareUrl(selectedLeague);
     const shareText = [
       `FanVerdict private league standings: ${selectedLeague.name}`,
       shareUrl,
@@ -428,6 +434,59 @@ export default function PrivateLeaguesPanel({
 
     await navigator.clipboard?.writeText(shareText);
     setMessage('Private league standings copied.');
+  };
+
+  const shareSelectedLeagueImage = async () => {
+    if (!selectedLeague) return;
+
+    if (selectedStandings.length === 0) {
+      setMessage('No private league standings are available to share yet.');
+      return;
+    }
+
+    setIsSharingStandingsImage(true);
+    setMessage('');
+
+    try {
+      const shareUrl = getSelectedLeagueShareUrl(selectedLeague);
+      const shareText = `FanVerdict private league standings: ${selectedLeague.name}\n${shareUrl}`;
+      const imageBlob = await createStandingsShareImage({
+        standings: selectedStandings,
+        title: selectedLeague.name,
+        subtitle: `${tournament.name} Private League Standings`,
+      });
+      const fileName = `${slugifyFileName(selectedLeague.name)}-standings.png`;
+      const imageFile = new File([imageBlob], fileName, { type: 'image/png' });
+      const canShareImage =
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [imageFile] });
+
+      if (canShareImage) {
+        await navigator.share({
+          title: `${selectedLeague.name} standings`,
+          text: shareText,
+          url: shareUrl,
+          files: [imageFile],
+        } as ShareData & { files: File[] });
+        setMessage('Private league standings image shared.');
+        return;
+      }
+
+      downloadBlob(imageBlob, fileName);
+
+      try {
+        await navigator.clipboard?.writeText(shareText);
+        setMessage('Private league standings image downloaded and link copied.');
+      } catch {
+        setMessage('Private league standings image downloaded.');
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage(getErrorMessage(error, 'Unable to share private league standings image.'));
+    } finally {
+      setIsSharingStandingsImage(false);
+    }
   };
 
   const exportSelectedLeague = () => {
@@ -674,6 +733,14 @@ export default function PrivateLeaguesPanel({
                     >
                       <Share2 size={15} />
                       Share
+                    </button>
+                    <button
+                      onClick={shareSelectedLeagueImage}
+                      disabled={isSharingStandingsImage || selectedStandings.length === 0}
+                      className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-bold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <BarChart3 size={15} />
+                      {isSharingStandingsImage ? 'Preparing...' : 'Share image'}
                     </button>
                     <button
                       onClick={exportSelectedLeague}

@@ -201,6 +201,15 @@ export type HistoricalTournament = {
   updated_at: string;
 };
 
+export type HistoricalTournamentParticipant = {
+  id: string;
+  historical_tournament_id: string;
+  historical_participant_id: string;
+  display_order: number;
+  source_row: number | null;
+  created_at: string;
+};
+
 export type HistoricalParticipant = {
   id: string;
   display_name: string;
@@ -232,6 +241,18 @@ export type HistoricalStanding = {
   regular_participated_events: number;
   accuracy_percent: number;
   regular_accuracy_percent: number;
+};
+
+export type HistoricalEventScore = {
+  id: string;
+  historical_event_id: string;
+  historical_participant_id: string;
+  outcome: 'correct' | 'incorrect' | 'missed';
+  points_awarded: number;
+  source_cell: string | null;
+  raw_value: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type HistoricalEventSummary = {

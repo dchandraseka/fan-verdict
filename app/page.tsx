@@ -21,12 +21,15 @@ import {
 import { ensureProfile } from '@/lib/account';
 import { getErrorMessage } from '@/lib/errors';
 import { calculateStandings, formatDateTime, isPollLocked, optionLabel, sortPollsByGameOrder, sortedPollOptions } from '@/lib/fanverdict';
+import { createStandingsShareImage, downloadBlob, slugifyFileName } from '@/lib/standings-share-image';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import PrivateLeaguesPanel from './private-leagues-panel';
 import type {
   HistoricalEventSummary,
+  HistoricalEventScore,
   HistoricalStanding,
   HistoricalTournament,
+  HistoricalTournamentParticipant,
   PointsLedger,
   Poll,
   Profile,
@@ -65,94 +68,15 @@ type PlayerMatrixRow = StandingRow & {
   missedPicks: number;
 };
 
-const STANDINGS_SHARE_IMAGE_WIDTH = 1080;
-const STANDINGS_SHARE_IMAGE_MAX_ROWS = 50;
-
-const drawRoundedRectangle = (
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) => {
-  const safeRadius = Math.min(radius, width / 2, height / 2);
-
-  context.beginPath();
-  context.moveTo(x + safeRadius, y);
-  context.lineTo(x + width - safeRadius, y);
-  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
-  context.lineTo(x + width, y + height - safeRadius);
-  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
-  context.lineTo(x + safeRadius, y + height);
-  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
-  context.lineTo(x, y + safeRadius);
-  context.quadraticCurveTo(x, y, x + safeRadius, y);
-  context.closePath();
-  context.fill();
+type HistoricalMatrixCell = {
+  eventId: string;
+  outcome: HistoricalEventScore['outcome'];
+  points: number;
+  rawValue: string | null;
 };
 
-const truncateCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
-  if (context.measureText(text).width <= maxWidth) return text;
-
-  const ellipsis = '...';
-  let truncated = text;
-
-  while (truncated.length > 0 && context.measureText(`${truncated}${ellipsis}`).width > maxWidth) {
-    truncated = truncated.slice(0, -1);
-  }
-
-  return `${truncated.trimEnd()}${ellipsis}`;
-};
-
-const drawCanvasText = (
-  context: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  options: {
-    align?: CanvasTextAlign;
-    color?: string;
-    font?: string;
-    maxWidth?: number;
-  } = {},
-) => {
-  context.fillStyle = options.color ?? '#0f172a';
-  context.font = options.font ?? '400 28px Arial, sans-serif';
-  context.textAlign = options.align ?? 'left';
-  context.textBaseline = 'middle';
-  context.fillText(options.maxWidth ? truncateCanvasText(context, text, options.maxWidth) : text, x, y);
-};
-
-const canvasToPngBlob = (canvas: HTMLCanvasElement) =>
-  new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-        return;
-      }
-
-      reject(new Error('Unable to create standings image.'));
-    }, 'image/png');
-  });
-
-const slugifyFileName = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'fanverdict';
-
-const downloadBlob = (blob: Blob, fileName: string) => {
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = objectUrl;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(objectUrl);
+type HistoricalMatrixRow = HistoricalStanding & {
+  cells: HistoricalMatrixCell[];
 };
 
 const createLiveStandingsShareUrl = (tournamentId: string | null) => {
@@ -162,164 +86,6 @@ const createLiveStandingsShareUrl = (tournamentId: string | null) => {
   url.hash = 'live-standings';
 
   return url.toString();
-};
-
-const createStandingsShareImage = async (standings: StandingRow[], tournamentName: string) => {
-  const rows = standings.slice(0, STANDINGS_SHARE_IMAGE_MAX_ROWS);
-  const hiddenRowCount = Math.max(standings.length - rows.length, 0);
-  const tableHeaderHeight = 54;
-  const rowHeight = 68;
-  const hiddenNoticeHeight = hiddenRowCount > 0 ? 48 : 0;
-  const footerHeight = 52;
-  const tableTop = 320;
-  const cardMargin = 40;
-  const imageHeight = Math.max(
-    720,
-    tableTop + tableHeaderHeight + rows.length * rowHeight + hiddenNoticeHeight + footerHeight + cardMargin,
-  );
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-
-  if (!context) throw new Error('Unable to prepare standings image.');
-
-  canvas.width = STANDINGS_SHARE_IMAGE_WIDTH;
-  canvas.height = imageHeight;
-
-  context.fillStyle = '#f8fafc';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  context.fillStyle = '#ffffff';
-  drawRoundedRectangle(context, cardMargin, cardMargin, canvas.width - cardMargin * 2, canvas.height - cardMargin * 2, 28);
-
-  context.fillStyle = '#2563eb';
-  drawRoundedRectangle(context, cardMargin, cardMargin, canvas.width - cardMargin * 2, 18, 9);
-
-  const contentLeft = 80;
-  const contentRight = canvas.width - 80;
-  const generatedAt = new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date());
-  const leader = standings[0] ?? null;
-
-  drawCanvasText(context, 'FanVerdict', contentLeft, 98, {
-    color: '#2563eb',
-    font: '800 30px Arial, sans-serif',
-  });
-  drawCanvasText(context, generatedAt, contentRight, 98, {
-    align: 'right',
-    color: '#64748b',
-    font: '500 24px Arial, sans-serif',
-  });
-  drawCanvasText(context, tournamentName, contentLeft, 158, {
-    font: '800 46px Arial, sans-serif',
-    maxWidth: 760,
-  });
-  drawCanvasText(context, 'Player Standings', contentLeft, 212, {
-    color: '#475569',
-    font: '700 30px Arial, sans-serif',
-  });
-
-  context.fillStyle = '#eff6ff';
-  drawRoundedRectangle(context, contentLeft, 244, 250, 48, 24);
-  drawCanvasText(context, `${standings.length} player${standings.length === 1 ? '' : 's'}`, contentLeft + 22, 268, {
-    color: '#1d4ed8',
-    font: '700 23px Arial, sans-serif',
-  });
-
-  if (leader) {
-    context.fillStyle = '#f1f5f9';
-    drawRoundedRectangle(context, contentLeft + 270, 244, 560, 48, 24);
-    drawCanvasText(context, `Leader: ${leader.display_name} (${leader.total_points} pts)`, contentLeft + 292, 268, {
-      color: '#334155',
-      font: '700 23px Arial, sans-serif',
-      maxWidth: 510,
-    });
-  }
-
-  const tableLeft = contentLeft;
-  const tableRight = contentRight;
-  const tableWidth = tableRight - tableLeft;
-  const participantColumnX = tableLeft + 150;
-  const pointsColumnX = tableLeft + 650;
-  const correctColumnX = tableLeft + 800;
-  const accuracyColumnX = tableRight - 24;
-  const participantMaxWidth = pointsColumnX - participantColumnX - 56;
-
-  context.fillStyle = '#f8fafc';
-  drawRoundedRectangle(context, tableLeft, tableTop, tableWidth, tableHeaderHeight, 14);
-  drawCanvasText(context, 'Rank', tableLeft + 24, tableTop + tableHeaderHeight / 2, {
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-  drawCanvasText(context, 'Participant', tableLeft + 150, tableTop + tableHeaderHeight / 2, {
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-  drawCanvasText(context, 'Points', pointsColumnX, tableTop + tableHeaderHeight / 2, {
-    align: 'right',
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-  drawCanvasText(context, 'Correct', correctColumnX, tableTop + tableHeaderHeight / 2, {
-    align: 'right',
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-  drawCanvasText(context, 'Accuracy', accuracyColumnX, tableTop + tableHeaderHeight / 2, {
-    align: 'right',
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-
-  rows.forEach((row, index) => {
-    const y = tableTop + tableHeaderHeight + index * rowHeight;
-    const midpoint = y + rowHeight / 2;
-
-    context.fillStyle = index === 0 ? '#eff6ff' : index % 2 === 0 ? '#ffffff' : '#f8fafc';
-    context.fillRect(tableLeft, y, tableWidth, rowHeight);
-
-    context.strokeStyle = '#e2e8f0';
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(tableLeft, y + rowHeight);
-    context.lineTo(tableRight, y + rowHeight);
-    context.stroke();
-
-    drawCanvasText(context, `#${index + 1}`, tableLeft + 24, midpoint, {
-      font: '800 24px Arial, sans-serif',
-    });
-    drawCanvasText(context, row.display_name, participantColumnX, midpoint, {
-      font: '700 26px Arial, sans-serif',
-      maxWidth: participantMaxWidth,
-    });
-    drawCanvasText(context, String(row.total_points), pointsColumnX, midpoint, {
-      align: 'right',
-      color: '#1d4ed8',
-      font: '900 30px Arial, sans-serif',
-    });
-    drawCanvasText(context, String(row.correct_picks), correctColumnX, midpoint, {
-      align: 'right',
-      color: '#334155',
-      font: '700 24px Arial, sans-serif',
-    });
-    drawCanvasText(context, `${row.accuracy}%`, accuracyColumnX, midpoint, {
-      align: 'right',
-      color: '#334155',
-      font: '700 24px Arial, sans-serif',
-    });
-  });
-
-  const noticeTop = tableTop + tableHeaderHeight + rows.length * rowHeight;
-
-  if (hiddenRowCount > 0) {
-    drawCanvasText(context, `Top ${rows.length} shown. Open the dashboard for ${hiddenRowCount} more.`, tableLeft + 24, noticeTop + 24, {
-      color: '#64748b',
-      font: '600 22px Arial, sans-serif',
-    });
-  }
-
-  return canvasToPngBlob(canvas);
 };
 
 export default function Dashboard() {
@@ -338,6 +104,8 @@ export default function Dashboard() {
   const [announcements, setAnnouncements] = useState<TournamentAnnouncement[]>([]);
   const [historicalStandings, setHistoricalStandings] = useState<HistoricalStanding[]>([]);
   const [historicalEvents, setHistoricalEvents] = useState<HistoricalEventSummary[]>([]);
+  const [historicalParticipantRows, setHistoricalParticipantRows] = useState<HistoricalTournamentParticipant[]>([]);
+  const [historicalEventScores, setHistoricalEventScores] = useState<HistoricalEventScore[]>([]);
   const [isAppAdmin, setIsAppAdmin] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [message, setMessage] = useState('');
@@ -583,9 +351,32 @@ export default function Dashboard() {
     [historicalStandings],
   );
 
-  const historicalBonusEvent = useMemo(
-    () => historicalEvents.find((event) => event.event_type === 'bonus') ?? null,
-    [historicalEvents],
+  const historicalScoreByEventAndParticipant = useMemo(() => {
+    const scoreMap = new Map<string, HistoricalEventScore>();
+
+    for (const score of historicalEventScores) {
+      scoreMap.set(`${score.historical_event_id}:${score.historical_participant_id}`, score);
+    }
+
+    return scoreMap;
+  }, [historicalEventScores]);
+
+  const historicalMatrixRows = useMemo<HistoricalMatrixRow[]>(
+    () =>
+      historicalStandings.map((standing) => ({
+        ...standing,
+        cells: historicalEvents.map((event) => {
+          const score = historicalScoreByEventAndParticipant.get(`${event.historical_event_id}:${standing.historical_participant_id}`);
+
+          return {
+            eventId: event.historical_event_id,
+            outcome: score?.outcome ?? 'missed',
+            points: score?.points_awarded ?? 0,
+            rawValue: score?.raw_value ?? null,
+          };
+        }),
+      })),
+    [historicalEvents, historicalScoreByEventAndParticipant, historicalStandings],
   );
 
   useEffect(() => {
@@ -757,6 +548,8 @@ export default function Dashboard() {
       setAnnouncements([]);
       setHistoricalStandings([]);
       setHistoricalEvents([]);
+      setHistoricalParticipantRows([]);
+      setHistoricalEventScores([]);
       setIsAppAdmin(false);
       setLoadState('ready');
       return;
@@ -772,26 +565,56 @@ export default function Dashboard() {
     setMessage('');
 
     try {
-      const [standingsResult, eventsResult] = await Promise.all([
+      const [standingsResult, eventsResult, participantResult] = await Promise.all([
         supabase
           .from('historical_standings')
           .select('*')
-          .eq('historical_tournament_id', tournamentId)
-          .order('total_points', { ascending: false })
-          .order('accuracy_percent', { ascending: false })
-          .order('display_name', { ascending: true }),
+          .eq('historical_tournament_id', tournamentId),
         supabase
           .from('historical_event_summary')
           .select('*')
           .eq('historical_tournament_id', tournamentId)
           .order('sort_order', { ascending: true }),
+        supabase
+          .from('historical_tournament_participants')
+          .select('*')
+          .eq('historical_tournament_id', tournamentId)
+          .order('display_order', { ascending: true }),
       ]);
 
       if (standingsResult.error) throw standingsResult.error;
       if (eventsResult.error) throw eventsResult.error;
+      if (participantResult.error) throw participantResult.error;
 
-      setHistoricalStandings((standingsResult.data ?? []) as HistoricalStanding[]);
-      setHistoricalEvents((eventsResult.data ?? []) as HistoricalEventSummary[]);
+      const loadedEvents = (eventsResult.data ?? []) as HistoricalEventSummary[];
+      const loadedParticipantRows = (participantResult.data ?? []) as HistoricalTournamentParticipant[];
+      const participantDisplayOrder = new Map(
+        loadedParticipantRows.map((participantRow) => [participantRow.historical_participant_id, participantRow.display_order]),
+      );
+      const loadedStandings = ((standingsResult.data ?? []) as HistoricalStanding[]).slice().sort(
+        (a, b) =>
+          (participantDisplayOrder.get(a.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) -
+            (participantDisplayOrder.get(b.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) ||
+          b.total_points - a.total_points ||
+          a.display_name.localeCompare(b.display_name),
+      );
+      const eventIds = loadedEvents.map((event) => event.historical_event_id);
+      let loadedEventScores: HistoricalEventScore[] = [];
+
+      if (eventIds.length > 0) {
+        const scoresResult = await supabase
+          .from('historical_event_scores')
+          .select('*')
+          .in('historical_event_id', eventIds);
+
+        if (scoresResult.error) throw scoresResult.error;
+        loadedEventScores = (scoresResult.data ?? []) as HistoricalEventScore[];
+      }
+
+      setHistoricalStandings(loadedStandings);
+      setHistoricalEvents(loadedEvents);
+      setHistoricalParticipantRows(loadedParticipantRows);
+      setHistoricalEventScores(loadedEventScores);
       setMembers([]);
       setProfiles([]);
       setPolls([]);
@@ -811,6 +634,8 @@ export default function Dashboard() {
     if (selectedTournamentKind === 'live' && selectedTournamentId) {
       setHistoricalStandings([]);
       setHistoricalEvents([]);
+      setHistoricalParticipantRows([]);
+      setHistoricalEventScores([]);
       loadTournamentData(selectedTournamentId);
     }
     if (selectedTournamentKind === 'historical' && selectedHistoricalTournamentId) {
@@ -903,7 +728,11 @@ export default function Dashboard() {
     try {
       const shareUrl = createLiveStandingsShareUrl(currentTournament.id);
       const shareText = `FanVerdict Player Standings for ${currentTournament.name}\n${shareUrl}`;
-      const imageBlob = await createStandingsShareImage(standings, currentTournament.name);
+      const imageBlob = await createStandingsShareImage({
+        standings,
+        title: currentTournament.name,
+        subtitle: 'Player Standings',
+      });
       const fileName = `${slugifyFileName(currentTournament.name)}-standings.png`;
       const imageFile = new File([imageBlob], fileName, { type: 'image/png' });
       const canShareImage =
@@ -951,6 +780,18 @@ export default function Dashboard() {
 
   const handleScrollToPlayerMatrix = () => {
     document.getElementById('player-matrix')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleScrollToHistoricalStandings = () => {
+    document.getElementById('historical-standings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleScrollToHistoricalMatrix = () => {
+    document.getElementById('historical-player-matrix')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleScrollToHistoricalEvents = () => {
+    document.getElementById('historical-event-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleScrollToPrivateLeagues = () => {
@@ -1170,21 +1011,31 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-4">
-                  <div className="rounded-md border border-slate-200 p-4">
-                    <p className="text-xs font-semibold uppercase text-slate-500">Participants</p>
-                    <p className="mt-1 text-2xl font-bold">{historicalStandings.length}</p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 p-4">
-                    <p className="text-xs font-semibold uppercase text-slate-500">Events</p>
+                  <button
+                    onClick={handleScrollToHistoricalStandings}
+                    className="rounded-md border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Player Standings</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalParticipantRows.length || historicalStandings.length}</p>
+                  </button>
+                  <button
+                    onClick={handleScrollToHistoricalMatrix}
+                    className="rounded-md border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Player Matrix</p>
                     <p className="mt-1 text-2xl font-bold">{historicalEvents.length}</p>
-                  </div>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">event columns</p>
+                  </button>
+                  <button
+                    onClick={handleScrollToHistoricalEvents}
+                    className="rounded-md border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                  >
+                    <p className="text-xs font-semibold uppercase text-slate-500">Event Summary</p>
+                    <p className="mt-1 text-2xl font-bold">{historicalEvents.length}</p>
+                  </button>
                   <div className="rounded-md border border-slate-200 p-4">
                     <p className="text-xs font-semibold uppercase text-slate-500">Claimed</p>
                     <p className="mt-1 text-2xl font-bold">{historicalClaimedCount}</p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 p-4">
-                    <p className="text-xs font-semibold uppercase text-slate-500">Bonus Winner</p>
-                    <p className="mt-1 text-2xl font-bold">{historicalBonusEvent?.correct_option_label ?? 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -1210,11 +1061,11 @@ export default function Dashboard() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="historical-standings" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                 <h2 className="flex items-center gap-2 font-bold">
                   <BarChart3 size={18} />
-                  Historical Standings
+                  Player Standings
                 </h2>
               </div>
               <div className="overflow-x-auto">
@@ -1271,7 +1122,80 @@ export default function Dashboard() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section id="historical-player-matrix" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h2 className="flex items-center gap-2 font-bold">
+                    <BarChart3 size={18} />
+                    Player Matrix
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {historicalEvents.length} historical event{historicalEvents.length === 1 ? '' : 's'} compared across{' '}
+                    {historicalMatrixRows.length} player{historicalMatrixRows.length === 1 ? '' : 's'}.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-green-800">Points won</span>
+                  <span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-800">Wrong pick</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">Missed</span>
+                </div>
+              </div>
+
+              {historicalEvents.length === 0 ? (
+                <div className="px-5 py-5 text-sm text-slate-500">No historical events are available for the player matrix.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="text-left text-sm"
+                    style={{ minWidth: `${Math.max(900, historicalEvents.length * 72 + 520)}px` }}
+                  >
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="sticky left-0 z-20 min-w-[180px] bg-slate-50 px-5 py-3">Player</th>
+                        {historicalEvents.map((event) => (
+                          <th key={event.historical_event_id} className="px-2 py-3 text-center" title={`${event.label} - ${event.event_type}`}>
+                            {event.label}
+                          </th>
+                        ))}
+                        <th className="px-3 py-3 text-right">Total</th>
+                        <th className="px-3 py-3 text-right">Accuracy</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {historicalMatrixRows.map((row) => (
+                        <tr key={row.historical_participant_id}>
+                          <td className="sticky left-0 z-10 bg-white px-5 py-3 font-bold">{row.display_name}</td>
+                          {row.cells.map((cell) => {
+                            const cellClass =
+                              cell.outcome === 'correct'
+                                ? 'bg-green-100 text-green-800'
+                                : cell.outcome === 'incorrect'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-slate-100 text-slate-500';
+                            const cellLabel = cell.outcome === 'missed' ? '-' : String(cell.points);
+
+                            return (
+                              <td key={`${row.historical_participant_id}-${cell.eventId}`} className="px-2 py-2 text-center">
+                                <span
+                                  className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs font-black ${cellClass}`}
+                                  title={cell.rawValue ? `Source value: ${cell.rawValue}` : cell.outcome}
+                                >
+                                  {cellLabel}
+                                </span>
+                              </td>
+                            );
+                          })}
+                          <td className="px-3 py-3 text-right text-lg font-black text-blue-700">{row.total_points}</td>
+                          <td className="px-3 py-3 text-right font-semibold">{row.regular_accuracy_percent}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section id="historical-event-summary" className="scroll-mt-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 px-5 py-4">
                 <h2 className="font-bold">Event Summary</h2>
               </div>
