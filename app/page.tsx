@@ -240,6 +240,11 @@ const createStandingsShareImage = async (standings: StandingRow[], tournamentNam
   const tableLeft = contentLeft;
   const tableRight = contentRight;
   const tableWidth = tableRight - tableLeft;
+  const participantColumnX = tableLeft + 150;
+  const pointsColumnX = tableLeft + 650;
+  const correctColumnX = tableLeft + 800;
+  const accuracyColumnX = tableRight - 24;
+  const participantMaxWidth = pointsColumnX - participantColumnX - 56;
 
   context.fillStyle = '#f8fafc';
   drawRoundedRectangle(context, tableLeft, tableTop, tableWidth, tableHeaderHeight, 14);
@@ -251,22 +256,17 @@ const createStandingsShareImage = async (standings: StandingRow[], tournamentNam
     color: '#64748b',
     font: '800 20px Arial, sans-serif',
   });
-  drawCanvasText(context, 'Points', tableLeft + 642, tableTop + tableHeaderHeight / 2, {
+  drawCanvasText(context, 'Points', pointsColumnX, tableTop + tableHeaderHeight / 2, {
     align: 'right',
     color: '#64748b',
     font: '800 20px Arial, sans-serif',
   });
-  drawCanvasText(context, 'Correct', tableLeft + 760, tableTop + tableHeaderHeight / 2, {
+  drawCanvasText(context, 'Correct', correctColumnX, tableTop + tableHeaderHeight / 2, {
     align: 'right',
     color: '#64748b',
     font: '800 20px Arial, sans-serif',
   });
-  drawCanvasText(context, 'Votes', tableLeft + 860, tableTop + tableHeaderHeight / 2, {
-    align: 'right',
-    color: '#64748b',
-    font: '800 20px Arial, sans-serif',
-  });
-  drawCanvasText(context, 'Accuracy', tableRight - 24, tableTop + tableHeaderHeight / 2, {
+  drawCanvasText(context, 'Accuracy', accuracyColumnX, tableTop + tableHeaderHeight / 2, {
     align: 'right',
     color: '#64748b',
     font: '800 20px Arial, sans-serif',
@@ -289,26 +289,21 @@ const createStandingsShareImage = async (standings: StandingRow[], tournamentNam
     drawCanvasText(context, `#${index + 1}`, tableLeft + 24, midpoint, {
       font: '800 24px Arial, sans-serif',
     });
-    drawCanvasText(context, row.display_name, tableLeft + 150, midpoint, {
+    drawCanvasText(context, row.display_name, participantColumnX, midpoint, {
       font: '700 26px Arial, sans-serif',
-      maxWidth: 390,
+      maxWidth: participantMaxWidth,
     });
-    drawCanvasText(context, String(row.total_points), tableLeft + 642, midpoint, {
+    drawCanvasText(context, String(row.total_points), pointsColumnX, midpoint, {
       align: 'right',
       color: '#1d4ed8',
       font: '900 30px Arial, sans-serif',
     });
-    drawCanvasText(context, String(row.correct_picks), tableLeft + 760, midpoint, {
+    drawCanvasText(context, String(row.correct_picks), correctColumnX, midpoint, {
       align: 'right',
       color: '#334155',
       font: '700 24px Arial, sans-serif',
     });
-    drawCanvasText(context, String(row.settled_votes), tableLeft + 860, midpoint, {
-      align: 'right',
-      color: '#334155',
-      font: '700 24px Arial, sans-serif',
-    });
-    drawCanvasText(context, `${row.accuracy}%`, tableRight - 24, midpoint, {
+    drawCanvasText(context, `${row.accuracy}%`, accuracyColumnX, midpoint, {
       align: 'right',
       color: '#334155',
       font: '700 24px Arial, sans-serif',
