@@ -588,16 +588,41 @@ export default function Dashboard() {
 
       const loadedEvents = (eventsResult.data ?? []) as HistoricalEventSummary[];
       const loadedParticipantRows = (participantResult.data ?? []) as HistoricalTournamentParticipant[];
+      const rawStandings = (standingsResult.data ?? []) as HistoricalStanding[];
+      const claimedProfileIds = Array.from(
+        new Set(
+          rawStandings
+            .map((standing) => standing.claimed_profile_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+      let claimedProfileById = new Map<string, Profile>();
+
+      if (claimedProfileIds.length > 0) {
+        const claimedProfilesResult = await supabase.from('profiles').select('*').in('id', claimedProfileIds);
+
+        if (claimedProfilesResult.error) throw claimedProfilesResult.error;
+        claimedProfileById = new Map(
+          ((claimedProfilesResult.data ?? []) as Profile[]).map((claimedProfile) => [claimedProfile.id, claimedProfile]),
+        );
+      }
+
       const participantDisplayOrder = new Map(
         loadedParticipantRows.map((participantRow) => [participantRow.historical_participant_id, participantRow.display_order]),
       );
-      const loadedStandings = ((standingsResult.data ?? []) as HistoricalStanding[]).slice().sort(
-        (a, b) =>
-          (participantDisplayOrder.get(a.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) -
-            (participantDisplayOrder.get(b.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) ||
-          b.total_points - a.total_points ||
-          a.display_name.localeCompare(b.display_name),
-      );
+      const loadedStandings = rawStandings
+        .map((standing) => {
+          const claimedProfile = standing.claimed_profile_id ? claimedProfileById.get(standing.claimed_profile_id) : null;
+
+          return claimedProfile?.display_name ? { ...standing, display_name: claimedProfile.display_name } : standing;
+        })
+        .sort(
+          (a, b) =>
+            (participantDisplayOrder.get(a.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) -
+              (participantDisplayOrder.get(b.historical_participant_id) ?? Number.MAX_SAFE_INTEGER) ||
+            b.total_points - a.total_points ||
+            a.display_name.localeCompare(b.display_name),
+        );
       const eventIds = loadedEvents.map((event) => event.historical_event_id);
       let loadedEventScores: HistoricalEventScore[] = [];
 

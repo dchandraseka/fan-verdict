@@ -1,6 +1,6 @@
 # FanVerdict
 
-Last source review: June 28, 2026
+Last source review: July 4, 2026
 
 FanVerdict is a tournament prediction app for running match polls, locking votes at game time, calculating points, managing private groups, and sharing live or historical standings.
 
@@ -21,9 +21,11 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Live tournament dashboard with main-menu shortcuts for player standings, Player Matrix, open polls, settled polls, results-vs-voting summary, private leagues, and vote audit log.
 - Tournament admins can publish one active dashboard message at a time. Messages use the existing mail-icon notice format and remain visible until removed.
 - Player standings link each player to a separate point-detail page with per-game picks, results, points, and ledger entries, plus a back link to the same tournament standings.
+- Player standings rank by points. When participants are tied on points, the earlier standings order is preserved based on who reached the point total first; accuracy is displayed as a motivational metric, not as a tie-breaker.
+- Player standings can be shared as a generated image. The image omits settled-vote counts for legibility, and the dashboard URL is sent through the share text/link payload rather than printed inside the PNG.
 - Player Matrix view below player standings and above open polls showing each player's settled-poll points by game, tournament total, accuracy, winning-voter counts, and majority/minority result rows.
-- Historical tournament dashboard with historical standings, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
-- Browser share, WhatsApp, and email sharing links for the dashboard.
+- Historical tournament dashboard with Player Standings, Player Matrix, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
+- Browser share, WhatsApp, email, and standings-image sharing links for the dashboard.
 - Members can join tournaments as participants.
 
 ### Polls And Voting
@@ -59,7 +61,7 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 - Invite acceptance automatically ensures the user's profile, tournament membership, and private league membership.
 - Discoverable private leagues support join requests with a three-attempt limit.
 - Private league admins can approve/reject join requests and remove members.
-- Private league standings can be shared or exported as CSV.
+- Private league standings inherit the tournament standings order and can be shared as a generated image, shared as a link, or exported as CSV.
 
 ### Reminders And Email
 
@@ -70,7 +72,10 @@ FanVerdict is a tournament prediction app for running match polls, locking votes
 ### Historical Data
 
 - Historical scorebook schema for participants, tournaments, events, event scores, and bonus votes.
-- Historical standings and event-summary views.
+- Historical standings use the imported workbook display order so IPL 2025 and IPL 2026 preserve the original win order instead of re-sorting ties by accuracy.
+- Claimed historical standings display the linked FanVerdict profile display name; unclaimed rows continue to use the imported workbook name.
+- Historical tournament views include Player Standings, Player Matrix, event summaries, claimed/unclaimed profile counts, and bonus-result summary.
+- Historical Player Matrix cells are driven by imported event scores, including correct, incorrect, missed, and point values.
 - Historical profile claim request flow for users.
 - App-admin review flow for approving or rejecting historical profile claims.
 - Historical imports can feed `points_ledger` with the `historical_import` reason.
