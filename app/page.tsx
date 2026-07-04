@@ -164,13 +164,13 @@ const createLiveStandingsShareUrl = (tournamentId: string | null) => {
   return url.toString();
 };
 
-const createStandingsShareImage = async (standings: StandingRow[], tournamentName: string, shareUrl: string) => {
+const createStandingsShareImage = async (standings: StandingRow[], tournamentName: string) => {
   const rows = standings.slice(0, STANDINGS_SHARE_IMAGE_MAX_ROWS);
   const hiddenRowCount = Math.max(standings.length - rows.length, 0);
   const tableHeaderHeight = 54;
   const rowHeight = 68;
   const hiddenNoticeHeight = hiddenRowCount > 0 ? 48 : 0;
-  const footerHeight = 146;
+  const footerHeight = 52;
   const tableTop = 320;
   const cardMargin = 40;
   const imageHeight = Math.max(
@@ -310,32 +310,14 @@ const createStandingsShareImage = async (standings: StandingRow[], tournamentNam
     });
   });
 
-  let footerTop = tableTop + tableHeaderHeight + rows.length * rowHeight;
+  const noticeTop = tableTop + tableHeaderHeight + rows.length * rowHeight;
 
   if (hiddenRowCount > 0) {
-    drawCanvasText(context, `Top ${rows.length} shown. Open the dashboard for ${hiddenRowCount} more.`, tableLeft + 24, footerTop + 24, {
+    drawCanvasText(context, `Top ${rows.length} shown. Open the dashboard for ${hiddenRowCount} more.`, tableLeft + 24, noticeTop + 24, {
       color: '#64748b',
       font: '600 22px Arial, sans-serif',
     });
-    footerTop += hiddenNoticeHeight;
   }
-
-  context.strokeStyle = '#cbd5e1';
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(tableLeft, footerTop + 34);
-  context.lineTo(tableRight, footerTop + 34);
-  context.stroke();
-
-  drawCanvasText(context, 'Open full dashboard:', tableLeft, footerTop + 78, {
-    color: '#475569',
-    font: '700 22px Arial, sans-serif',
-  });
-  drawCanvasText(context, shareUrl, tableLeft, footerTop + 114, {
-    color: '#2563eb',
-    font: '600 22px Arial, sans-serif',
-    maxWidth: tableWidth,
-  });
 
   return canvasToPngBlob(canvas);
 };
@@ -921,7 +903,7 @@ export default function Dashboard() {
     try {
       const shareUrl = createLiveStandingsShareUrl(currentTournament.id);
       const shareText = `FanVerdict Player Standings for ${currentTournament.name}\n${shareUrl}`;
-      const imageBlob = await createStandingsShareImage(standings, currentTournament.name, shareUrl);
+      const imageBlob = await createStandingsShareImage(standings, currentTournament.name);
       const fileName = `${slugifyFileName(currentTournament.name)}-standings.png`;
       const imageFile = new File([imageBlob], fileName, { type: 'image/png' });
       const canShareImage =
